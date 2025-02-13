@@ -2,15 +2,13 @@ use crate::{
     expr::{Binary, Expr, Grouping, Literal, Unary},
     token::Token,
     token_type::TokenType,
-    LoxError,
+    LoxError, Result,
 };
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
 }
-
-type Result<T> = std::result::Result<T, LoxError>;
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Parser {
@@ -22,10 +20,19 @@ impl Parser {
             return Ok(None);
         }
         Some(self.expression()).transpose()
+        //let mut statements: Vec<Stmt> = Vec::new();
+        //while !self.is_at_end() {
+        //    statements.push(self.statement());
+        //}
+        //statements
     }
 
     fn expression(&mut self) -> Result<Expr> {
         self.equality()
+    }
+
+    fn statement(&mut self) -> Stmt {
+        todo!()
     }
 
     fn equality(&mut self) -> Result<Expr> {

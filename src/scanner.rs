@@ -1,4 +1,4 @@
-use crate::{object::Object, token::Token, token_type::TokenType, LoxError};
+use crate::{object::Object, token::Token, token_type::TokenType, LoxError, Result};
 
 pub struct Scanner {
     source: String,
@@ -19,7 +19,7 @@ impl Scanner {
         }
     }
 
-    pub fn scan_tokens(mut self) -> Result<Vec<Token>, LoxError> {
+    pub fn scan_tokens(mut self) -> Result<Vec<Token>> {
         let mut had_error = false;
         let eof = self.source.len();
 
@@ -30,7 +30,7 @@ impl Scanner {
             }
         }
         self.tokens
-            .push(Token::new(TokenType::Eof, "", Object::None, self.line));
+            .push(Token::new(TokenType::Eof, "", Object::Null, self.line));
 
         match had_error {
             false => Ok(self.tokens),
@@ -38,7 +38,7 @@ impl Scanner {
         }
     }
 
-    fn scan_token(&mut self) -> Result<(), LoxError> {
+    fn scan_token(&mut self) -> Result<()> {
         let c = self.advance();
         let mut if_equals_else = |is_equal: TokenType, not_equal: TokenType| {
             let token_type = if self.advance_if_is('=') {
@@ -116,7 +116,7 @@ impl Scanner {
     }
 
     fn add_token(&mut self, token_type: TokenType) {
-        self.add_token_with_literal(token_type, Object::None)
+        self.add_token_with_literal(token_type, Object::Null)
     }
 
     fn add_token_with_literal(&mut self, token_type: TokenType, literal: Object) {
@@ -151,7 +151,7 @@ impl Scanner {
         self.source.as_bytes()[self.current + 1] as char
     }
 
-    fn string(&mut self) -> Result<(), LoxError> {
+    fn string(&mut self) -> Result<()> {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;

@@ -1,32 +1,35 @@
-use crate::expr::{Binary, Expr, Grouping, Literal, Unary, Visitor};
+use crate::expr::{Binary, BorrowingVisitor, Expr, Grouping, Literal, Unary};
 
 pub struct AstPrinter {}
 
 impl AstPrinter {
     pub fn print(&self, expr: Expr) -> String {
-        expr.accept::<String>(self)
+        expr.accept_borrowed::<String>(self)
     }
 
     fn parenthesize(&self, name: &str, exprs: &[&Expr]) -> String {
-        let parts: Vec<_> = exprs.iter().map(|expr| expr.accept(self)).collect();
+        let parts: Vec<_> = exprs
+            .iter()
+            .map(|expr| expr.accept_borrowed(self))
+            .collect();
         format!("({} {})", name, parts.join(" "))
     }
 }
 
-impl Visitor<String> for &AstPrinter {
-    fn visit_binary(&self, expr: &Binary) -> String {
+impl BorrowingVisitor<String> for &AstPrinter {
+    fn borrow_binary(&self, expr: &Binary) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
     }
 
-    fn visit_grouping(&self, expr: &Grouping) -> String {
+    fn borrow_grouping(&self, expr: &Grouping) -> String {
         self.parenthesize("group", &[&*expr.expression])
     }
 
-    fn visit_literal(&self, expr: &Literal) -> String {
+    fn borrow_literal(&self, expr: &Literal) -> String {
         expr.value.to_string()
     }
 
-    fn visit_unary(&self, expr: &Unary) -> String {
+    fn borrow_unary(&self, expr: &Unary) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.right])
     }
 }
