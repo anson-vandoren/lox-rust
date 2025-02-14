@@ -75,7 +75,7 @@ pub fn derive_expression_type(input: TokenStream) -> TokenStream {
                 visitor.#visitor_name(self)
             }
 
-            fn accept_borrowed<T>(&self, visitor: impl BorrowingVisitor<T>) -> T {
+            fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
                 visitor.#borrowing_visitor_name(self)
             }
         }

@@ -26,7 +26,7 @@ impl Environment {
         self.values.insert(name, value);
     }
 
-    pub fn assign(&mut self, name: Token, value: Object) -> Result<()> {
+    pub fn assign(&mut self, name: &Token, value: Object) -> Result<()> {
         match self.values.entry(name.lexeme.clone()) {
             Entry::Vacant(_) => {
                 if let Some(ref mut outer) = self.enclosing {
@@ -35,7 +35,7 @@ impl Environment {
                     Err(LoxError::Runtime {
                         expected: format!("Variable '{}' to be defined.", name.lexeme),
                         found: "undefined".to_string(),
-                        token: name,
+                        token: name.clone(),
                     })
                 }
             }

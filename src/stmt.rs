@@ -12,6 +12,10 @@ impl Expression {
     fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
         visitor.visit_expression_stmt(self)
     }
+
+    fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
+        visitor.borrow_expression_stmt(self)
+    }
 }
 
 pub struct Print {
@@ -25,6 +29,10 @@ impl Print {
 
     fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
         visitor.visit_print_stmt(self)
+    }
+
+    fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
+        visitor.borrow_print_stmt(self)
     }
 }
 
@@ -41,6 +49,10 @@ impl Var {
     fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
         visitor.visit_var_stmt(self)
     }
+
+    fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
+        visitor.borrow_var_stmt(self)
+    }
 }
 
 pub struct Block {
@@ -55,6 +67,10 @@ impl Block {
     fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
         visitor.visit_block_stmt(self)
     }
+
+    fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
+        visitor.borrow_block_stmt(self)
+    }
 }
 
 pub struct If {
@@ -63,13 +79,31 @@ pub struct If {
     pub else_branch: Option<Box<Stmt>>,
 }
 
+pub struct While {
+    pub condition: Expr,
+    pub body: Box<Stmt>,
+}
+
+impl While {
+    pub fn stmt(condition: Expr, body: Stmt) -> Stmt {
+        Stmt::While(Self {
+            condition,
+            body: Box::new(body),
+        })
+    }
+
+    fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
+        visitor.visit_while_stmt(self)
+    }
+
+    fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
+        visitor.borrow_while_stmt(self)
+    }
+}
+
 impl If {
     pub fn stmt(condition: Expr, then_branch: Stmt, else_branch: Option<Stmt>) -> Stmt {
-        let else_branch = if let Some(branch) = else_branch {
-            Some(Box::new(branch))
-        } else {
-            None
-        };
+        let else_branch = else_branch.map(Box::new);
         Stmt::If(Self {
             condition,
             then_branch: Box::new(then_branch),
@@ -80,6 +114,10 @@ impl If {
     fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
         visitor.visit_if_stmt(self)
     }
+
+    fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
+        visitor.borrow_if_stmt(self)
+    }
 }
 
 pub enum Stmt {
@@ -88,6 +126,7 @@ pub enum Stmt {
     Print(Print),
     Var(Var),
     If(If),
+    While(While),
 }
 
 impl Stmt {
@@ -98,6 +137,18 @@ impl Stmt {
             Self::Print(stmt) => stmt.accept(visitor),
             Self::Var(stmt) => stmt.accept(visitor),
             Self::If(stmt) => stmt.accept(visitor),
+            Self::While(stmt) => stmt.accept(visitor),
+        }
+    }
+
+    pub fn accept_borrowed<T>(&self, visitor: impl BorrowingVisitor<T>) -> T {
+        match self {
+            Self::Block(stmt) => stmt.accept_borrowed(visitor),
+            Self::Expression(stmt) => stmt.accept_borrowed(visitor),
+            Self::Print(stmt) => stmt.accept_borrowed(visitor),
+            Self::Var(stmt) => stmt.accept_borrowed(visitor),
+            Self::If(stmt) => stmt.accept_borrowed(visitor),
+            Self::While(stmt) => stmt.accept_borrowed(visitor),
         }
     }
 }
@@ -108,4 +159,14 @@ pub trait Visitor<T> {
     fn visit_print_stmt(&mut self, stmt: Print) -> T;
     fn visit_var_stmt(&mut self, stmt: Var) -> T;
     fn visit_if_stmt(&mut self, stmt: If) -> T;
+    fn visit_while_stmt(&mut self, stmt: While) -> T;
+}
+
+pub trait BorrowingVisitor<T> {
+    fn borrow_block_stmt(&mut self, stmt: &Block) -> T;
+    fn borrow_expression_stmt(&mut self, stmt: &Expression) -> T;
+    fn borrow_print_stmt(&mut self, stmt: &Print) -> T;
+    fn borrow_var_stmt(&mut self, stmt: &Var) -> T;
+    fn borrow_if_stmt(&mut self, stmt: &If) -> T;
+    fn borrow_while_stmt(&mut self, stmt: &While) -> T;
 }

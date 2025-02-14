@@ -10,6 +10,13 @@ pub struct Binary {
 }
 
 #[derive(Debug, ExpressionType)]
+pub struct Logical {
+    pub left: Box<Expr>,
+    pub operator: Token,
+    pub right: Box<Expr>,
+}
+
+#[derive(Debug, ExpressionType)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
@@ -39,6 +46,7 @@ pub struct Assign {
 #[derive(Debug)]
 pub enum Expr {
     Binary(Binary),
+    Logical(Logical),
     Grouping(Grouping),
     Literal(Literal),
     Unary(Unary),
@@ -50,6 +58,7 @@ impl Expr {
     pub fn accept<T>(self, visitor: impl Visitor<T>) -> T {
         match self {
             Self::Binary(expr) => expr.accept(visitor),
+            Self::Logical(expr) => expr.accept(visitor),
             Self::Grouping(expr) => expr.accept(visitor),
             Self::Literal(expr) => expr.accept(visitor),
             Self::Unary(expr) => expr.accept(visitor),
@@ -61,6 +70,7 @@ impl Expr {
     pub fn accept_borrowed<T>(&self, visitor: impl BorrowingVisitor<T>) -> T {
         match self {
             Self::Binary(expr) => expr.accept_borrowed(visitor),
+            Self::Logical(expr) => expr.accept_borrowed(visitor),
             Self::Grouping(expr) => expr.accept_borrowed(visitor),
             Self::Literal(expr) => expr.accept_borrowed(visitor),
             Self::Unary(expr) => expr.accept_borrowed(visitor),
@@ -72,6 +82,7 @@ impl Expr {
 
 pub trait Visitor<T> {
     fn visit_binary(&mut self, expr: Binary) -> T;
+    fn visit_logical(&mut self, expr: Logical) -> T;
     fn visit_grouping(&mut self, expr: Grouping) -> T;
     fn visit_literal(&self, expr: Literal) -> T;
     fn visit_unary(&mut self, expr: Unary) -> T;
@@ -80,10 +91,11 @@ pub trait Visitor<T> {
 }
 
 pub trait BorrowingVisitor<T> {
-    fn borrow_binary(&self, expr: &Binary) -> T;
-    fn borrow_grouping(&self, expr: &Grouping) -> T;
-    fn borrow_literal(&self, expr: &Literal) -> T;
-    fn borrow_unary(&self, expr: &Unary) -> T;
-    fn borrow_variable(&self, expr: &Variable) -> T;
-    fn borrow_assign(&self, expr: &Assign) -> T;
+    fn borrow_binary(&mut self, expr: &Binary) -> T;
+    fn borrow_logical(&mut self, expr: &Logical) -> T;
+    fn borrow_grouping(&mut self, expr: &Grouping) -> T;
+    fn borrow_literal(&mut self, expr: &Literal) -> T;
+    fn borrow_unary(&mut self, expr: &Unary) -> T;
+    fn borrow_variable(&mut self, expr: &Variable) -> T;
+    fn borrow_assign(&mut self, expr: &Assign) -> T;
 }

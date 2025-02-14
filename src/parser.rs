@@ -1,6 +1,6 @@
 use crate::{
-    expr::{Assign, Binary, Expr, Grouping, Literal, Unary, Variable},
-    stmt::{Block, Expression, If, Print, Stmt, Var},
+    expr::{Assign, Binary, Expr, Grouping, Literal, Logical, Unary, Variable},
+    stmt::{Block, Expression, If, Print, Stmt, Var, While},
     token::Token,
     token_type::TokenType,
     LoxError, Result,
@@ -56,11 +56,17 @@ impl Parser {
         if self.match_advance(&[TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_advance(&[TokenType::While]) {
+            return self.while_statement();
+        }
         if self.match_advance(&[TokenType::LeftBrace]) {
             return Ok(Block::stmt(self.block()?));
         }
         if self.match_advance(&[TokenType::If]) {
             return self.if_statement();
+        }
+        if self.match_advance(&[TokenType::For]) {
+            return self.for_statement();
         }
         self.expression_statement()
     }
@@ -69,6 +75,15 @@ impl Parser {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value")?;
         Ok(Print::stmt(value))
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after condition.")?;
+        let body = self.statement()?;
+
+        Ok(While::stmt(condition, body))
     }
 
     fn if_statement(&mut self) -> Result<Stmt> {
@@ -85,6 +100,77 @@ impl Parser {
         Ok(If::stmt(condition, then_branch, else_branch))
     }
 
+    /// De-sugar a for statement into a while statement
+    fn for_statement(&mut self) -> Result<Stmt> {
+        /* for (var i = 0; i < 10; i = i + 1) {
+         *    print i;
+         *  }
+         */
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
+        // `var i = 0;`, could also be empty, or just an expression which
+        // we'd treat as a statement to keep things tidy
+        let initializer = match self.peek().typ {
+            TokenType::Semicolon => {
+                self.advance();
+                None
+            }
+            TokenType::Var => {
+                self.advance();
+                Some(self.var_declaration()?)
+            }
+            _ => Some(self.expression_statement()?),
+        };
+
+        // `i < 10;`, if not present use `true` instead
+        let condition = match self.check(&TokenType::Semicolon) {
+            true => Literal::expr(true.into()),
+            false => self.expression()?,
+        };
+        self.consume(TokenType::Semicolon, "Expect ';' after loop condition")?;
+
+        // `i = i + 1;`, could also be empty
+        let increment = match self.check(&TokenType::RightParen) {
+            true => None,
+            false => Some(self.expression()?),
+        };
+        self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
+
+        // `{ print i; }`
+        let mut body = self.statement()?;
+
+        // Now, build out the while statement, working backwards
+        if let Some(incr) = increment {
+            /* {
+             *   { print i; }
+             *   i = i + 1;
+             * }
+             */
+            body = Block::stmt(vec![body, Expression::stmt(incr)]);
+        }
+        /* while (i < 10) {
+         *   { print i; }
+         *   i = i + 1;
+         * }
+         */
+        body = While::stmt(condition, body);
+
+        /* {
+         *   // scope `var` to just this block
+         *   var i = 0;
+         *   while (i < 10) {
+         *     { print i; }
+         *     i = i + 1;
+         *   }
+         * }
+         */
+        if let Some(init) = initializer {
+            body = Block::stmt(vec![init, body]);
+        }
+
+        // boom!
+        Ok(body)
+    }
+
     fn expression_statement(&mut self) -> Result<Stmt> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after expression")?;
@@ -96,7 +182,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<Expr> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if self.match_advance(&[TokenType::Equal]) {
             let equals = self.previous();
@@ -108,6 +194,30 @@ impl Parser {
             }
 
             Err(error(&equals, "Invalid assignment target."))?;
+        }
+
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> Result<Expr> {
+        let mut expr = self.and()?;
+
+        while self.match_advance(&[TokenType::Or]) {
+            let operator = self.previous();
+            let right = self.and()?;
+            expr = Logical::expr(expr, operator, right);
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Expr> {
+        let mut expr = self.equality()?;
+
+        while self.match_advance(&[TokenType::And]) {
+            let operator = self.previous();
+            let right = self.equality()?;
+            expr = Logical::expr(expr, operator, right);
         }
 
         Ok(expr)
@@ -211,6 +321,8 @@ impl Parser {
         Err(error(self.peek(), msg))
     }
 
+    /// If any of the token types are the next token, advance and return true
+    /// Otherwise, return false and do not advance
     fn match_advance(&mut self, typs: &[TokenType]) -> bool {
         for typ in typs {
             if self.check(typ) {

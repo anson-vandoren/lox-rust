@@ -17,28 +17,32 @@ impl AstPrinter {
 }
 
 impl BorrowingVisitor<String> for &AstPrinter {
-    fn borrow_binary(&self, expr: &Binary) -> String {
+    fn borrow_binary(&mut self, expr: &Binary) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
     }
 
-    fn borrow_grouping(&self, expr: &Grouping) -> String {
+    fn borrow_grouping(&mut self, expr: &Grouping) -> String {
         self.parenthesize("group", &[&*expr.expression])
     }
 
-    fn borrow_literal(&self, expr: &Literal) -> String {
+    fn borrow_literal(&mut self, expr: &Literal) -> String {
         expr.value.to_string()
     }
 
-    fn borrow_unary(&self, expr: &Unary) -> String {
+    fn borrow_unary(&mut self, expr: &Unary) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.right])
     }
 
-    fn borrow_variable(&self, expr: &Variable) -> String {
+    fn borrow_variable(&mut self, expr: &Variable) -> String {
         expr.name.to_string()
     }
 
-    fn borrow_assign(&self, expr: &Assign) -> String {
+    fn borrow_assign(&mut self, expr: &Assign) -> String {
         self.parenthesize("assign", &[&*expr.value])
+    }
+
+    fn borrow_logical(&mut self, expr: &crate::expr::Logical) -> String {
+        self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
     }
 }
 
