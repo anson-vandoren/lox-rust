@@ -157,4 +157,15 @@ impl stmt::Visitor<Result<()>> for &mut Interpreter {
         self.environment.define(stmt.name.lexeme, value);
         Ok(())
     }
+
+    fn visit_if_stmt(&mut self, stmt: stmt::If) -> Result<()> {
+        let res = self.evaluate(stmt.condition)?;
+        if self.is_truthy(res) {
+            self.execute(*stmt.then_branch)?;
+        } else if let Some(eb) = stmt.else_branch {
+            self.execute(*eb)?;
+        }
+
+        Ok(())
+    }
 }

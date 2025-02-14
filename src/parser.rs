@@ -1,6 +1,6 @@
 use crate::{
     expr::{Assign, Binary, Expr, Grouping, Literal, Unary, Variable},
-    stmt::{Block, Expression, Print, Stmt, Var},
+    stmt::{Block, Expression, If, Print, Stmt, Var},
     token::Token,
     token_type::TokenType,
     LoxError, Result,
@@ -30,49 +30,6 @@ impl Parser {
         Ok(statements)
     }
 
-    fn expression(&mut self) -> Result<Expr> {
-        self.assignment()
-    }
-
-    fn assignment(&mut self) -> Result<Expr> {
-        let expr = self.equality()?;
-
-        if self.match_advance(&[TokenType::Equal]) {
-            let equals = self.previous();
-            let value = self.assignment()?;
-
-            if let Expr::Variable(var) = expr {
-                let name = var.name;
-                return Ok(Assign::expr(name, value));
-            }
-
-            Err(error(&equals, "Invalid assignment target."))?;
-        }
-
-        Ok(expr)
-    }
-
-    fn statement(&mut self) -> Result<Stmt> {
-        if self.match_advance(&[TokenType::Print]) {
-            return self.print_statement();
-        }
-        if self.match_advance(&[TokenType::LeftBrace]) {
-            return Ok(Block::stmt(self.block()?));
-        }
-        self.expression_statement()
-    }
-
-    fn block(&mut self) -> Result<Vec<Stmt>> {
-        let mut statements: Vec<Stmt> = Vec::new();
-        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
-            statements.push(self.declaration()?);
-        }
-
-        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
-
-        Ok(statements)
-    }
-
     fn declaration(&mut self) -> Result<Stmt> {
         if self.match_advance(&[TokenType::Var]) {
             self.var_declaration()
@@ -95,16 +52,65 @@ impl Parser {
         Ok(Var::stmt(name, initializer))
     }
 
+    fn statement(&mut self) -> Result<Stmt> {
+        if self.match_advance(&[TokenType::Print]) {
+            return self.print_statement();
+        }
+        if self.match_advance(&[TokenType::LeftBrace]) {
+            return Ok(Block::stmt(self.block()?));
+        }
+        if self.match_advance(&[TokenType::If]) {
+            return self.if_statement();
+        }
+        self.expression_statement()
+    }
+
     fn print_statement(&mut self) -> Result<Stmt> {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value")?;
         Ok(Print::stmt(value))
     }
 
+    fn if_statement(&mut self) -> Result<Stmt> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after if condition")?;
+
+        let then_branch = self.statement()?;
+        let else_branch = match self.match_advance(&[TokenType::Else]) {
+            true => Some(self.statement()?),
+            false => None,
+        };
+
+        Ok(If::stmt(condition, then_branch, else_branch))
+    }
+
     fn expression_statement(&mut self) -> Result<Stmt> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after expression")?;
         Ok(Expression::stmt(expr))
+    }
+
+    fn expression(&mut self) -> Result<Expr> {
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr> {
+        let expr = self.equality()?;
+
+        if self.match_advance(&[TokenType::Equal]) {
+            let equals = self.previous();
+            let value = self.assignment()?;
+
+            if let Expr::Variable(var) = expr {
+                let name = var.name;
+                return Ok(Assign::expr(name, value));
+            }
+
+            Err(error(&equals, "Invalid assignment target."))?;
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result<Expr> {
@@ -117,10 +123,6 @@ impl Parser {
         }
 
         Ok(expr)
-    }
-
-    fn previous(&self) -> Token {
-        self.tokens[self.current - 1].clone()
     }
 
     fn comparison(&mut self) -> Result<Expr> {
@@ -184,6 +186,21 @@ impl Parser {
             }
             _ => Err(error(&self.previous(), "Expected an expression")),
         }
+    }
+
+    fn block(&mut self) -> Result<Vec<Stmt>> {
+        let mut statements: Vec<Stmt> = Vec::new();
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+
+        Ok(statements)
+    }
+
+    fn previous(&self) -> Token {
+        self.tokens[self.current - 1].clone()
     }
 
     fn consume(&mut self, typ: TokenType, msg: &str) -> Result<Token> {
