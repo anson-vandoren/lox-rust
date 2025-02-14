@@ -130,6 +130,8 @@ pub enum LoxError {
         expected: String,
         token: Token,
     },
+    #[snafu(display("Internal error: {message}"))]
+    Internal { message: String },
 }
 
 type Result<T> = std::result::Result<T, LoxError>;

@@ -8,13 +8,13 @@ use crate::{
 };
 
 pub struct Interpreter {
-    environment: Option<Environment>,
+    environment: Box<Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
         Self {
-            environment: Some(Environment::new()),
+            environment: Box::new(Environment::new()),
         }
     }
 
@@ -42,23 +42,36 @@ impl Interpreter {
     }
 
     fn execute_block(&mut self, statements: Vec<Stmt>) {
-        let env = self
-            .environment
-            .take()
-            .expect("Intepreter had no Environment");
-        self.environment = Some(env.new_enclosing());
+        // TODO: consider passing environment to the visit methods instead
+        self.enter_scope();
+        for statement in statements {
+            if let Err(e) = self.execute(statement) {
+                eprintln!("Failed to execute block, bailing early: {e}");
+                break;
+            }
+        }
+        self.exit_scope().unwrap();
+    }
 
-        // restore our env
-        self.environment = self
-            .environment
-            .take()
-            .expect("Interpreter had no Environment")
-            .into_outer();
-        todo!()
+    fn enter_scope(&mut self) {
+        let current_env = std::mem::replace(&mut self.environment, Box::new(Environment::new()));
+        self.environment = Box::new(Environment::with_enclosing(current_env));
+    }
+
+    fn exit_scope(&mut self) -> Result<()> {
+        if let Some(enclosing) = self.environment.enclosing.take() {
+            self.environment = enclosing;
+            Ok(())
+        } else {
+            Err(LoxError::Internal {
+                message: "Interpreter did not have an enclosing environment when exiting scope."
+                    .to_string(),
+            })
+        }
     }
 }
 
-impl expr::Visitor<Result<Object>> for &mut Interpreter<'_> {
+impl expr::Visitor<Result<Object>> for &mut Interpreter {
     fn visit_binary(&mut self, expr: crate::expr::Binary) -> Result<Object> {
         let left = self.evaluate(*expr.left)?;
         let right = self.evaluate(*expr.right)?;
@@ -123,7 +136,8 @@ impl stmt::Visitor<Result<()>> for &mut Interpreter {
         Ok(())
     }
     fn visit_expression_stmt(&mut self, stmt: stmt::Expression) -> Result<()> {
-        self.evaluate(stmt.expression)?;
+        let res = self.evaluate(stmt.expression)?;
+        println!("{}", res);
         Ok(())
     }
 
@@ -139,6 +153,7 @@ impl stmt::Visitor<Result<()>> for &mut Interpreter {
             None => Object::Null,
         };
 
+        println!("{}", value);
         self.environment.define(stmt.name.lexeme, value);
         Ok(())
     }

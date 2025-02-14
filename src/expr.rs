@@ -2,40 +2,41 @@ use macros::ExpressionType;
 
 use crate::{object::Object, token::Token};
 
-#[derive(ExpressionType)]
+#[derive(Debug, ExpressionType)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(ExpressionType)]
+#[derive(Debug, ExpressionType)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
 
-#[derive(ExpressionType)]
+#[derive(Debug, ExpressionType)]
 pub struct Literal {
     pub value: Object,
 }
 
-#[derive(ExpressionType)]
+#[derive(Debug, ExpressionType)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(ExpressionType)]
+#[derive(Debug, ExpressionType)]
 pub struct Variable {
     pub name: Token,
 }
 
-#[derive(ExpressionType)]
+#[derive(Debug, ExpressionType)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
 }
 
+#[derive(Debug)]
 pub enum Expr {
     Binary(Binary),
     Grouping(Grouping),

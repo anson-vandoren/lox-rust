@@ -4,7 +4,7 @@ use crate::{object::Object, token::Token, LoxError, Result};
 
 pub struct Environment {
     values: HashMap<String, Object>,
-    enclosing: Option<Box<Environment>>,
+    pub enclosing: Option<Box<Environment>>,
 }
 
 impl Environment {
@@ -15,18 +15,10 @@ impl Environment {
         }
     }
 
-    pub fn new_enclosing(self) -> Environment {
-        Environment {
+    pub fn with_enclosing(enclosing: Box<Environment>) -> Environment {
+        Self {
             values: HashMap::new(),
-            enclosing: Some(Box::new(self)),
-        }
-    }
-
-    pub fn into_outer(self) -> Option<Environment> {
-        if let Some(outer) = self.enclosing {
-            Some(*outer)
-        } else {
-            None
+            enclosing: Some(enclosing),
         }
     }
 

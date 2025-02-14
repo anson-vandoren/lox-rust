@@ -51,6 +51,10 @@ impl Block {
     pub fn stmt(statements: Vec<Stmt>) -> Stmt {
         Stmt::Block(Self { statements })
     }
+
+    fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
+        visitor.visit_block_stmt(self)
+    }
 }
 
 pub enum Stmt {
@@ -63,6 +67,7 @@ pub enum Stmt {
 impl Stmt {
     pub fn accept<T>(self, visitor: impl Visitor<T>) -> T {
         match self {
+            Self::Block(stmt) => stmt.accept(visitor),
             Self::Expression(stmt) => stmt.accept(visitor),
             Self::Print(stmt) => stmt.accept(visitor),
             Self::Var(stmt) => stmt.accept(visitor),
