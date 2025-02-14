@@ -71,7 +71,7 @@ pub fn derive_expression_type(input: TokenStream) -> TokenStream {
                 }
             }
 
-            fn accept<T>(self, visitor: impl Visitor<T>) -> T {
+            fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
                 visitor.#visitor_name(self)
             }
 

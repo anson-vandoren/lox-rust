@@ -20,7 +20,7 @@ pub struct ObjectRuntimeError {
 }
 
 impl ObjectRuntimeError {
-    pub fn to_lox(self, token: Token) -> LoxError {
+    pub fn into_lox(self, token: Token) -> LoxError {
         LoxError::Runtime {
             found: self.found,
             expected: self.expected,

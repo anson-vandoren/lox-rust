@@ -1,24 +1,35 @@
 use crate::{
-    expr::{Expr, Visitor},
+    environment::Environment,
+    expr::{self, Expr},
     object::Object,
+    stmt::{self, Stmt},
     token_type::TokenType,
     LoxError, Result,
 };
 
-pub struct Interpreter {}
+pub struct Interpreter {
+    environment: Option<Environment>,
+}
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Self {}
+        Self {
+            environment: Some(Environment::new()),
+        }
     }
 
-    pub fn interpret(&self, expr: Expr) -> Result<Object> {
-        let value = self.evaluate(expr)?;
-        println!("{}", value);
-        Ok(value)
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
+        for statement in statements {
+            self.execute(statement)?;
+        }
+        Ok(())
     }
 
-    fn evaluate(&self, expr: Expr) -> Result<Object> {
+    fn execute(&mut self, stmt: Stmt) -> Result<()> {
+        stmt.accept(self)
+    }
+
+    fn evaluate(&mut self, expr: Expr) -> Result<Object> {
         expr.accept::<Result<Object>>(self)
     }
 
@@ -29,10 +40,26 @@ impl Interpreter {
             _ => true,
         }
     }
+
+    fn execute_block(&mut self, statements: Vec<Stmt>) {
+        let env = self
+            .environment
+            .take()
+            .expect("Intepreter had no Environment");
+        self.environment = Some(env.new_enclosing());
+
+        // restore our env
+        self.environment = self
+            .environment
+            .take()
+            .expect("Interpreter had no Environment")
+            .into_outer();
+        todo!()
+    }
 }
 
-impl Visitor<Result<Object>> for &Interpreter {
-    fn visit_binary(&self, expr: crate::expr::Binary) -> Result<Object> {
+impl expr::Visitor<Result<Object>> for &mut Interpreter<'_> {
+    fn visit_binary(&mut self, expr: crate::expr::Binary) -> Result<Object> {
         let left = self.evaluate(*expr.left)?;
         let right = self.evaluate(*expr.right)?;
 
@@ -41,10 +68,10 @@ impl Visitor<Result<Object>> for &Interpreter {
             TokenType::GreaterEqual => Object::Boolean(left >= right),
             TokenType::Less => Object::Boolean(left < right),
             TokenType::LessEqual => Object::Boolean(left <= right),
-            TokenType::Minus => (left - right).map_err(|e| e.to_lox(expr.operator))?,
-            TokenType::Plus => (left + right).map_err(|e| e.to_lox(expr.operator))?,
-            TokenType::Slash => (left / right).map_err(|e| e.to_lox(expr.operator))?,
-            TokenType::Star => (left * right).map_err(|e| e.to_lox(expr.operator))?,
+            TokenType::Minus => (left - right).map_err(|e| e.into_lox(expr.operator))?,
+            TokenType::Plus => (left + right).map_err(|e| e.into_lox(expr.operator))?,
+            TokenType::Slash => (left / right).map_err(|e| e.into_lox(expr.operator))?,
+            TokenType::Star => (left * right).map_err(|e| e.into_lox(expr.operator))?,
             TokenType::EqualEqual => Object::Boolean(left == right),
             TokenType::BangEqual => Object::Boolean(left != right),
             _ => Object::Null,
@@ -53,19 +80,19 @@ impl Visitor<Result<Object>> for &Interpreter {
         Ok(obj)
     }
 
-    fn visit_grouping(&self, expr: crate::expr::Grouping) -> Result<Object> {
+    fn visit_grouping(&mut self, expr: expr::Grouping) -> Result<Object> {
         self.evaluate(*expr.expression)
     }
 
-    fn visit_literal(&self, expr: crate::expr::Literal) -> Result<Object> {
+    fn visit_literal(&self, expr: expr::Literal) -> Result<Object> {
         Ok(expr.value)
     }
 
-    fn visit_unary(&self, expr: crate::expr::Unary) -> Result<Object> {
+    fn visit_unary(&mut self, expr: expr::Unary) -> Result<Object> {
         let right = self.evaluate(*expr.right)?;
         let obj = match expr.operator.typ {
             TokenType::Minus => {
-                let n = right.into_number().map_err(|e| e.to_lox(expr.operator))?;
+                let n = right.into_number().map_err(|e| e.into_lox(expr.operator))?;
                 Object::Number(-n)
             }
             TokenType::Bang => Object::Boolean(!self.is_truthy(right)),
@@ -77,5 +104,42 @@ impl Visitor<Result<Object>> for &Interpreter {
         };
 
         Ok(obj)
+    }
+
+    fn visit_variable(&self, expr: expr::Variable) -> Result<Object> {
+        self.environment.get(expr.name)
+    }
+
+    fn visit_assign(&mut self, expr: expr::Assign) -> Result<Object> {
+        let value = self.evaluate(*expr.value)?;
+        self.environment.assign(expr.name, value.clone())?;
+        Ok(value)
+    }
+}
+
+impl stmt::Visitor<Result<()>> for &mut Interpreter {
+    fn visit_block_stmt(&mut self, stmt: stmt::Block) -> Result<()> {
+        self.execute_block(stmt.statements);
+        Ok(())
+    }
+    fn visit_expression_stmt(&mut self, stmt: stmt::Expression) -> Result<()> {
+        self.evaluate(stmt.expression)?;
+        Ok(())
+    }
+
+    fn visit_print_stmt(&mut self, stmt: stmt::Print) -> Result<()> {
+        let value = self.evaluate(stmt.expression)?;
+        println!("{}", value);
+        Ok(())
+    }
+
+    fn visit_var_stmt(&mut self, stmt: stmt::Var) -> Result<()> {
+        let value = match stmt.initializer {
+            Some(init) => self.evaluate(init)?,
+            None => Object::Null,
+        };
+
+        self.environment.define(stmt.name.lexeme, value);
+        Ok(())
     }
 }

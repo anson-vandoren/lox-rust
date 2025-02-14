@@ -1,5 +1,6 @@
 use crate::{
-    expr::{Binary, Expr, Grouping, Literal, Unary},
+    expr::{Assign, Binary, Expr, Grouping, Literal, Unary, Variable},
+    stmt::{Block, Expression, Print, Stmt, Var},
     token::Token,
     token_type::TokenType,
     LoxError, Result,
@@ -15,24 +16,95 @@ impl Parser {
         Self { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Option<Expr>> {
-        if self.peek().typ == TokenType::Eof {
-            return Ok(None);
+    pub fn parse(&mut self) -> Result<Vec<Stmt>> {
+        let mut statements: Vec<Stmt> = Vec::new();
+        while !self.is_at_end() {
+            match self.declaration() {
+                Ok(stmt) => statements.push(stmt),
+                Err(e) => {
+                    self.synchronize();
+                    eprintln!("Parsing error {e}");
+                }
+            }
         }
-        Some(self.expression()).transpose()
-        //let mut statements: Vec<Stmt> = Vec::new();
-        //while !self.is_at_end() {
-        //    statements.push(self.statement());
-        //}
-        //statements
+        Ok(statements)
     }
 
     fn expression(&mut self) -> Result<Expr> {
-        self.equality()
+        self.assignment()
     }
 
-    fn statement(&mut self) -> Stmt {
-        todo!()
+    fn assignment(&mut self) -> Result<Expr> {
+        let expr = self.equality()?;
+
+        if self.match_advance(&[TokenType::Equal]) {
+            let equals = self.previous();
+            let value = self.assignment()?;
+
+            if let Expr::Variable(var) = expr {
+                let name = var.name;
+                return Ok(Assign::expr(name, value));
+            }
+
+            Err(error(&equals, "Invalid assignment target."))?;
+        }
+
+        Ok(expr)
+    }
+
+    fn statement(&mut self) -> Result<Stmt> {
+        if self.match_advance(&[TokenType::Print]) {
+            return self.print_statement();
+        }
+        if self.match_advance(&[TokenType::LeftBrace]) {
+            return Ok(Block::stmt(self.block()?));
+        }
+        self.expression_statement()
+    }
+
+    fn block(&mut self) -> Result<Vec<Stmt>> {
+        let mut statements: Vec<Stmt> = Vec::new();
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+
+        Ok(statements)
+    }
+
+    fn declaration(&mut self) -> Result<Stmt> {
+        if self.match_advance(&[TokenType::Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt> {
+        let name = self.consume(TokenType::Identifier, "Expect variable name.")?;
+        let initializer = match self.match_advance(&[TokenType::Equal]) {
+            true => Some(self.expression()?),
+            false => None,
+        };
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration",
+        )?;
+
+        Ok(Var::stmt(name, initializer))
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt> {
+        let value = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after value")?;
+        Ok(Print::stmt(value))
+    }
+
+    fn expression_statement(&mut self) -> Result<Stmt> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after expression")?;
+        Ok(Expression::stmt(expr))
     }
 
     fn equality(&mut self) -> Result<Expr> {
@@ -104,6 +176,7 @@ impl Parser {
             TokenType::True => Ok(Literal::expr(true.into())),
             TokenType::Nil => Ok(Literal::expr(().into())),
             TokenType::Number | TokenType::String => Ok(Literal::expr(self.previous().literal)),
+            TokenType::Identifier => Ok(Variable::expr(self.previous())),
             TokenType::LeftParen => {
                 let expr = self.expression()?;
                 self.consume(TokenType::RightParen, "Expected ')' after expression.")?;

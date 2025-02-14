@@ -1,4 +1,5 @@
 mod ast_printer;
+mod environment;
 mod expr;
 mod interpreter;
 mod object;
@@ -13,11 +14,7 @@ use interpreter::Interpreter;
 use parser::Parser;
 use scanner::Scanner;
 use snafu::prelude::*;
-use std::{
-    env,
-    io::{self, Write},
-    path::Path,
-};
+use std::{env, path::Path};
 use token::Token;
 
 fn main() {
@@ -92,26 +89,17 @@ impl Lox {
             self.had_error = true;
         })?;
         let mut parser = Parser::new(tokens);
-        let printer = AstPrinter {};
-        loop {
-            let expr = parser.parse();
-            match expr {
-                Ok(e) => match e {
-                    Some(expr) => {
-                        //println!("{}", printer.print(expr));
-                        self.interpreter.interpret(expr).inspect_err(|_| {
-                            self.had_runtime_error = true;
-                        })?;
-                    }
-                    None => {
-                        break;
-                    }
-                },
-                Err(err) => {
-                    self.had_error = true;
-                    eprintln!("{}", err);
-                    break;
-                }
+        let _printer = AstPrinter {};
+        let stmts = parser.parse();
+        match stmts {
+            Ok(s) => {
+                self.interpreter.interpret(s).inspect_err(|_| {
+                    self.had_runtime_error = true;
+                })?;
+            }
+            Err(err) => {
+                self.had_error = true;
+                eprintln!("{}", err);
             }
         }
 

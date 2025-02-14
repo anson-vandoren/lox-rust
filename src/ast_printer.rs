@@ -1,4 +1,4 @@
-use crate::expr::{Binary, BorrowingVisitor, Expr, Grouping, Literal, Unary};
+use crate::expr::{Assign, Binary, BorrowingVisitor, Expr, Grouping, Literal, Unary, Variable};
 
 pub struct AstPrinter {}
 
@@ -31,6 +31,14 @@ impl BorrowingVisitor<String> for &AstPrinter {
 
     fn borrow_unary(&self, expr: &Unary) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.right])
+    }
+
+    fn borrow_variable(&self, expr: &Variable) -> String {
+        expr.name.to_string()
+    }
+
+    fn borrow_assign(&self, expr: &Assign) -> String {
+        self.parenthesize("assign", &[&*expr.value])
     }
 }
 
