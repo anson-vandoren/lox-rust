@@ -1,3 +1,5 @@
+use tracing::{error, instrument};
+
 use crate::{object::Object, token::Token, token_type::TokenType, LoxError, Result};
 
 pub struct Scanner {
@@ -19,13 +21,18 @@ impl Scanner {
         }
     }
 
+    #[instrument(skip(self), err, level="trace")]
     pub fn scan_tokens(mut self) -> Result<Vec<Token>> {
         let mut had_error = false;
         let eof = self.source.len();
 
         while self.current < eof {
             self.start = self.current;
-            if self.scan_token().map_err(|e| eprintln!("{}", e)).is_err() {
+            if self
+                .scan_token()
+                .map_err(|error| error!(?error, "Error while scanning"))
+                .is_err()
+            {
                 had_error = true;
             }
         }
@@ -38,6 +45,7 @@ impl Scanner {
         }
     }
 
+    #[instrument(skip(self), err, level = "trace")]
     fn scan_token(&mut self) -> Result<()> {
         let c = self.advance();
         let mut if_equals_else = |is_equal: TokenType, not_equal: TokenType| {

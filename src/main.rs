@@ -16,8 +16,11 @@ use scanner::Scanner;
 use snafu::prelude::*;
 use std::{env, path::Path};
 use token::Token;
+use tracing::instrument;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 fn main() {
+    init_tracing();
     let args: Vec<String> = env::args().collect();
     let mut lox = Lox::new();
     let code = match args.len() {
@@ -29,6 +32,20 @@ fn main() {
         _ => lox.run_prompt(),
     };
     std::process::exit(code);
+}
+
+fn init_tracing() {
+    let format = format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME"));
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format.into()),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_line_number(true)
+        )
+        .init();
 }
 
 struct Lox {
@@ -83,6 +100,7 @@ impl Lox {
         }
     }
 
+    #[instrument(skip(self, script), err, ret, level = "trace")]
     fn run(&mut self, script: String) -> Result<()> {
         let scanner = Scanner::new(script);
         let tokens = scanner.scan_tokens().inspect_err(|_| {

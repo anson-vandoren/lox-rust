@@ -43,7 +43,6 @@ pub struct Assign {
     pub value: Box<Expr>,
 }
 
-#[derive(Debug)]
 pub enum Expr {
     Binary(Binary),
     Logical(Logical),
@@ -52,6 +51,20 @@ pub enum Expr {
     Unary(Unary),
     Variable(Variable),
     Assign(Assign),
+}
+
+impl std::fmt::Debug for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Binary(expr) => write!(f, "{:?}", expr),
+            Self::Logical(expr) => write!(f, "{:?}", expr),
+            Self::Grouping(expr) => write!(f, "{:?}", expr),
+            Self::Literal(expr) => write!(f, "{:?}", expr),
+            Self::Unary(expr) => write!(f, "{:?}", expr),
+            Self::Variable(expr) => write!(f, "{:?}", expr),
+            Self::Assign(expr) => write!(f, "{:?}", expr),
+        }
+    }
 }
 
 impl Expr {

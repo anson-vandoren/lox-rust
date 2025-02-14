@@ -1,3 +1,5 @@
+use tracing::instrument;
+
 use crate::{
     environment::Environment,
     expr::{self, Expr},
@@ -18,6 +20,7 @@ impl Interpreter {
         }
     }
 
+    #[instrument(skip(self, statements), err, ret, level = "trace")]
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
         for statement in statements {
             self.execute(statement)?;
@@ -25,6 +28,7 @@ impl Interpreter {
         Ok(())
     }
 
+    #[instrument(skip(self), err, ret, level = "trace")]
     fn execute(&mut self, stmt: Stmt) -> Result<()> {
         stmt.accept(self)
     }

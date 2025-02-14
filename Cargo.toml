@@ -7,4 +7,6 @@ edition = "2024"
 rustyline = "15.0.0"
 snafu = "0.8.5"
 macros = { path = "./macros/" }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 

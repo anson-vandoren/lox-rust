@@ -1,5 +1,6 @@
 use crate::{expr::Expr, token::Token};
 
+#[derive(Debug)]
 pub struct Expression {
     pub expression: Expr,
 }
@@ -18,6 +19,7 @@ impl Expression {
     }
 }
 
+#[derive(Debug)]
 pub struct Print {
     pub expression: Expr,
 }
@@ -36,6 +38,7 @@ impl Print {
     }
 }
 
+#[derive(Debug)]
 pub struct Var {
     pub name: Token,
     pub initializer: Option<Expr>,
@@ -55,6 +58,7 @@ impl Var {
     }
 }
 
+#[derive(Debug)]
 pub struct Block {
     pub statements: Vec<Stmt>,
 }
@@ -73,12 +77,14 @@ impl Block {
     }
 }
 
+#[derive(Debug)]
 pub struct If {
     pub condition: Expr,
     pub then_branch: Box<Stmt>,
     pub else_branch: Option<Box<Stmt>>,
 }
 
+#[derive(Debug)]
 pub struct While {
     pub condition: Expr,
     pub body: Box<Stmt>,
@@ -127,6 +133,19 @@ pub enum Stmt {
     Var(Var),
     If(If),
     While(While),
+}
+
+impl std::fmt::Debug for Stmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Block(stmt) => write!(f, "{:?}", stmt),
+            Self::Expression(stmt) => write!(f, "{:?}", stmt),
+            Self::Print(stmt) => write!(f, "{:?}", stmt),
+            Self::Var(stmt) => write!(f, "{:?}", stmt),
+            Self::If(stmt) => write!(f, "{:?}", stmt),
+            Self::While(stmt) => write!(f, "{:?}", stmt),
+        }
+    }
 }
 
 impl Stmt {
