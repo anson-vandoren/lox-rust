@@ -2,6 +2,7 @@ use std::collections::{hash_map::Entry, HashMap};
 
 use crate::{object::Object, token::Token, LoxError, Result};
 
+#[derive(Clone)]
 pub struct Environment {
     values: HashMap<String, Object>,
     pub enclosing: Option<Box<Environment>>,

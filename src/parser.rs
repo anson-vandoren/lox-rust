@@ -1,5 +1,5 @@
 use crate::{
-    expr::{Assign, Binary, Expr, Grouping, Literal, Logical, Unary, Variable},
+    expr::{Assign, Binary, Call, Expr, Grouping, Literal, Logical, Unary, Variable},
     stmt::{Block, Expression, If, Print, Stmt, Var, While},
     token::Token,
     token_type::TokenType,
@@ -12,24 +12,33 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, current: 0 }
     }
 
     pub fn parse(&mut self) -> Result<Vec<Stmt>> {
         let mut statements: Vec<Stmt> = Vec::new();
+        let mut had_error = false;
         while !self.is_at_end() {
             match self.declaration() {
                 Ok(stmt) => statements.push(stmt),
                 Err(e) => {
+                    had_error = true;
                     self.synchronize();
                     eprintln!("Parsing error {e}");
                 }
             }
         }
-        Ok(statements)
+        if had_error {
+            Err(LoxError::Fatal)
+        } else {
+            Ok(statements)
+        }
     }
+}
 
+// Declarations
+impl Parser {
     fn declaration(&mut self) -> Result<Stmt> {
         if self.match_advance(&[TokenType::Var]) {
             self.var_declaration()
@@ -40,9 +49,10 @@ impl Parser {
 
     fn var_declaration(&mut self) -> Result<Stmt> {
         let name = self.consume(TokenType::Identifier, "Expect variable name.")?;
-        let initializer = match self.match_advance(&[TokenType::Equal]) {
-            true => Some(self.expression()?),
-            false => None,
+        let initializer = if self.match_advance(&[TokenType::Equal]) {
+            Some(self.expression()?)
+        } else {
+            None
         };
         self.consume(
             TokenType::Semicolon,
@@ -51,7 +61,10 @@ impl Parser {
 
         Ok(Var::stmt(name, initializer))
     }
+}
 
+// Statements
+impl Parser {
     fn statement(&mut self) -> Result<Stmt> {
         if self.match_advance(&[TokenType::Print]) {
             return self.print_statement();
@@ -92,9 +105,10 @@ impl Parser {
         self.consume(TokenType::RightParen, "Expect ')' after if condition")?;
 
         let then_branch = self.statement()?;
-        let else_branch = match self.match_advance(&[TokenType::Else]) {
-            true => Some(self.statement()?),
-            false => None,
+        let else_branch = if self.match_advance(&[TokenType::Else]) {
+            Some(self.statement()?)
+        } else {
+            None
         };
 
         Ok(If::stmt(condition, then_branch, else_branch))
@@ -177,6 +191,20 @@ impl Parser {
         Ok(Expression::stmt(expr))
     }
 
+    fn block(&mut self) -> Result<Vec<Stmt>> {
+        let mut statements: Vec<Stmt> = Vec::new();
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+
+        Ok(statements)
+    }
+}
+
+// Expressions
+impl Parser {
     fn expression(&mut self) -> Result<Expr> {
         self.assignment()
     }
@@ -193,10 +221,10 @@ impl Parser {
                 return Ok(Assign::expr(name, value));
             }
 
-            Err(error(&equals, "Invalid assignment target."))?;
+            Err(error(&equals, "Invalid assignment target."))
+        } else {
+            Ok(expr)
         }
-
-        Ok(expr)
     }
 
     fn or(&mut self) -> Result<Expr> {
@@ -279,7 +307,40 @@ impl Parser {
             let right = self.unary()?;
             return Ok(Unary::expr(operator, right));
         }
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expr> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.match_advance(&[TokenType::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr> {
+        let mut arguments = Vec::new();
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                if arguments.len() >= 255 {
+                    return Err(error(self.peek(), "Can't have more than 255 arguments."));
+                }
+                arguments.push(self.expression()?);
+                if !self.match_advance(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
+
+        Ok(Call::expr(callee, paren, arguments))
     }
 
     fn primary(&mut self) -> Result<Expr> {
@@ -297,18 +358,10 @@ impl Parser {
             _ => Err(error(&self.previous(), "Expected an expression")),
         }
     }
+}
 
-    fn block(&mut self) -> Result<Vec<Stmt>> {
-        let mut statements: Vec<Stmt> = Vec::new();
-        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
-            statements.push(self.declaration()?);
-        }
-
-        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
-
-        Ok(statements)
-    }
-
+// Helpers
+impl Parser {
     fn previous(&self) -> Token {
         self.tokens[self.current - 1].clone()
     }
@@ -324,14 +377,12 @@ impl Parser {
     /// If any of the token types are the next token, advance and return true
     /// Otherwise, return false and do not advance
     fn match_advance(&mut self, typs: &[TokenType]) -> bool {
-        for typ in typs {
-            if self.check(typ) {
-                self.advance();
-                return true;
-            }
+        if typs.iter().any(|t| self.check(t)) {
+            self.advance();
+            true
+        } else {
+            false
         }
-
-        false
     }
 
     fn check(&self, typ: &TokenType) -> bool {

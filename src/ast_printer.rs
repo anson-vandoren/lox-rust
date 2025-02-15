@@ -21,6 +21,10 @@ impl BorrowingVisitor<String> for &AstPrinter {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
     }
 
+    fn borrow_logical(&mut self, expr: &crate::expr::Logical) -> String {
+        self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
+    }
+
     fn borrow_grouping(&mut self, expr: &Grouping) -> String {
         self.parenthesize("group", &[&*expr.expression])
     }
@@ -41,8 +45,8 @@ impl BorrowingVisitor<String> for &AstPrinter {
         self.parenthesize("assign", &[&*expr.value])
     }
 
-    fn borrow_logical(&mut self, expr: &crate::expr::Logical) -> String {
-        self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
+    fn borrow_call(&mut self, expr: &crate::expr::Call) -> String {
+        todo!()
     }
 }
 

@@ -43,6 +43,13 @@ pub struct Assign {
     pub value: Box<Expr>,
 }
 
+#[derive(Debug, ExpressionType)]
+pub struct Call {
+    pub callee: Box<Expr>,
+    pub paren: Token,
+    pub arguments: Vec<Expr>,
+}
+
 pub enum Expr {
     Binary(Binary),
     Logical(Logical),
@@ -51,6 +58,7 @@ pub enum Expr {
     Unary(Unary),
     Variable(Variable),
     Assign(Assign),
+    Call(Call),
 }
 
 impl std::fmt::Debug for Expr {
@@ -63,6 +71,7 @@ impl std::fmt::Debug for Expr {
             Self::Unary(expr) => write!(f, "{:?}", expr),
             Self::Variable(expr) => write!(f, "{:?}", expr),
             Self::Assign(expr) => write!(f, "{:?}", expr),
+            Self::Call(expr) => write!(f, "{:?}", expr),
         }
     }
 }
@@ -77,6 +86,7 @@ impl Expr {
             Self::Unary(expr) => expr.accept(visitor),
             Self::Variable(expr) => expr.accept(visitor),
             Self::Assign(expr) => expr.accept(visitor),
+            Self::Call(expr) => expr.accept(visitor),
         }
     }
 
@@ -89,6 +99,7 @@ impl Expr {
             Self::Unary(expr) => expr.accept_borrowed(visitor),
             Self::Variable(expr) => expr.accept_borrowed(visitor),
             Self::Assign(expr) => expr.accept_borrowed(visitor),
+            Self::Call(expr) => expr.accept_borrowed(visitor),
         }
     }
 }
@@ -101,6 +112,7 @@ pub trait Visitor<T> {
     fn visit_unary(&mut self, expr: Unary) -> T;
     fn visit_variable(&self, expr: Variable) -> T;
     fn visit_assign(&mut self, expr: Assign) -> T;
+    fn visit_call(&mut self, expr: Call) -> T;
 }
 
 pub trait BorrowingVisitor<T> {
@@ -111,4 +123,5 @@ pub trait BorrowingVisitor<T> {
     fn borrow_unary(&mut self, expr: &Unary) -> T;
     fn borrow_variable(&mut self, expr: &Variable) -> T;
     fn borrow_assign(&mut self, expr: &Assign) -> T;
+    fn borrow_call(&mut self, expr: &Call) -> T;
 }

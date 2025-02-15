@@ -2,6 +2,9 @@ mod ast_printer;
 mod environment;
 mod expr;
 mod interpreter;
+mod lox_callable;
+mod lox_function;
+mod native;
 mod object;
 mod parser;
 mod scanner;
@@ -9,15 +12,16 @@ mod stmt;
 mod token;
 mod token_type;
 
+use std::{env, path::Path};
+
 use ast_printer::AstPrinter;
 use interpreter::Interpreter;
 use parser::Parser;
 use scanner::Scanner;
 use snafu::prelude::*;
-use std::{env, path::Path};
 use token::Token;
 use tracing::instrument;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
     init_tracing();
@@ -38,13 +42,8 @@ fn init_tracing() {
     let format = format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME"));
 
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format.into()),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_line_number(true)
-        )
+        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format.into()))
+        .with(tracing_subscriber::fmt::layer().with_line_number(true))
         .init();
 }
 
@@ -65,9 +64,7 @@ impl Lox {
 
     pub fn run_file<T: AsRef<Path> + Into<String>>(&mut self, script_path: T) -> i32 {
         let file = std::fs::read_to_string(&script_path)
-            .context(FileSnafu {
-                path: script_path.into(),
-            })
+            .context(FileSnafu { path: script_path.into() })
             .expect("Cannot read file");
 
         match self.run(file) {
@@ -111,7 +108,7 @@ impl Lox {
         let stmts = parser.parse();
         match stmts {
             Ok(s) => {
-                self.interpreter.interpret(s).inspect_err(|_| {
+                self.interpreter.interpret(&s).inspect_err(|_| {
                     self.had_runtime_error = true;
                 })?;
             }
@@ -128,26 +125,15 @@ impl Lox {
 #[derive(Debug, Snafu)]
 pub enum LoxError {
     #[snafu(display("[line {line}] Error {whence}: {message}"))]
-    Parsing {
-        line: usize,
-        whence: String,
-        message: String,
-    },
+    Parsing { line: usize, whence: String, message: String },
     #[snafu(display("IO error"))]
     Io { source: std::io::Error },
     #[snafu(display("Could not read source file at '{path}'"))]
-    File {
-        source: std::io::Error,
-        path: String,
-    },
+    File { source: std::io::Error, path: String },
     #[snafu(display("Fatal error, exiting"))]
     Fatal,
     #[snafu(display("Runtime error - found {found}, expected {expected}\n[line {}]", token.line))]
-    Runtime {
-        found: String,
-        expected: String,
-        token: Token,
-    },
+    Runtime { found: String, expected: String, token: Token },
     #[snafu(display("Internal error: {message}"))]
     Internal { message: String },
 }

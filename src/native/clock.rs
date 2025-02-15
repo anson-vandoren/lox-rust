@@ -1,0 +1,26 @@
+use std::time::SystemTime;
+
+use crate::{interpreter::Interpreter, lox_callable::LoxCallable, object::Object};
+
+pub struct LoxClock {}
+
+impl std::fmt::Display for LoxClock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<native function>")
+    }
+}
+
+//impl LoxCallable for LoxClock {
+//    fn call(&self, _interpreter: Interpreter, _arguments: Vec<Object>) -> Object {
+//        Object::Number(
+//            SystemTime::now()
+//                .duration_since(SystemTime::UNIX_EPOCH)
+//                .expect("Unix Epoch was a long damn time ago")
+//                .as_secs() as f64,
+//        )
+//    }
+//
+//    fn arity(&self) -> u8 {
+//        0
+//    }
+//}

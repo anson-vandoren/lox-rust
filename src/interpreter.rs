@@ -3,6 +3,7 @@ use tracing::instrument;
 use crate::{
     environment::Environment,
     expr::{self, Expr},
+    native::clock::LoxClock,
     object::Object,
     stmt::{self, Stmt},
     token_type::TokenType,
@@ -11,30 +12,37 @@ use crate::{
 
 pub struct Interpreter {
     environment: Box<Environment>,
+    globals: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
+        let globals = Environment::new();
+        // globals.define("clock".to_string(), LoxClock {});
         Self {
-            environment: Box::new(Environment::new()),
+            environment: Box::new(globals.clone()),
+            globals,
         }
     }
 
     #[instrument(skip(self, statements), err, ret, level = "trace")]
-    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
+    pub fn interpret(&mut self, statements: &Vec<Stmt>) -> Result<()> {
         for statement in statements {
             self.execute(statement)?;
         }
         Ok(())
     }
 
-    #[instrument(skip(self), err, ret, level = "trace")]
-    fn execute(&mut self, stmt: Stmt) -> Result<()> {
-        stmt.accept(self)
-    }
-
-    fn execute_ref(&mut self, stmt: &Stmt) -> Result<()> {
-        stmt.accept_borrowed(self)
+    fn execute(&mut self, stmt: &Stmt) -> Result<()> {
+        match stmt {
+            Stmt::Print(stmt) => self.execute_print_stmt(stmt),
+            Stmt::Block(stmt) => self.execute_block(&stmt.statements),
+            Stmt::Expression(stmt) => self.evaluate_ref(&stmt.expression).map(|_| ()),
+            Stmt::Var(stmt) => self.execute_var_stmt(stmt),
+            Stmt::If(stmt) => self.execute_if_stmt(stmt),
+            Stmt::While(stmt) => self.execute_while_stmt(stmt),
+            Stmt::Function(function) => todo!(),
+        }
     }
 
     fn evaluate(&mut self, expr: Expr) -> Result<Object> {
@@ -53,16 +61,14 @@ impl Interpreter {
         }
     }
 
-    fn execute_block(&mut self, statements: &Vec<Stmt>) {
+    fn execute_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
         // TODO: consider passing environment to the visit methods instead
         self.enter_scope();
         for statement in statements {
-            if let Err(e) = self.execute_ref(statement) {
-                eprintln!("Failed to execute block, bailing early: {e}");
-                break;
-            }
+            self.execute(statement).inspect_err(|_| self.exit_scope().unwrap())?
         }
         self.exit_scope().unwrap();
+        Ok(())
     }
 
     fn enter_scope(&mut self) {
@@ -76,10 +82,46 @@ impl Interpreter {
             Ok(())
         } else {
             Err(LoxError::Internal {
-                message: "Interpreter did not have an enclosing environment when exiting scope."
-                    .to_string(),
+                message: "Interpreter did not have an enclosing environment when exiting scope.".to_string(),
             })
         }
+    }
+
+    // TODO: shouldn't need to be mut
+    fn execute_print_stmt(&mut self, stmt: &stmt::Print) -> Result<()> {
+        println!("{}", self.evaluate_ref(&stmt.expression)?);
+        Ok(())
+    }
+
+    fn execute_var_stmt(&mut self, stmt: &stmt::Var) -> Result<()> {
+        let value = match &stmt.initializer {
+            Some(init) => self.evaluate_ref(init)?,
+            None => Object::Null,
+        };
+
+        self.environment.define(stmt.name.lexeme.clone(), value);
+        Ok(())
+    }
+
+    fn execute_if_stmt(&mut self, stmt: &stmt::If) -> Result<()> {
+        let res = self.evaluate_ref(&stmt.condition)?;
+        if self.is_truthy(&res) {
+            self.execute(&stmt.then_branch)?;
+        } else if let Some(ref eb) = stmt.else_branch {
+            self.execute(eb)?;
+        }
+
+        Ok(())
+    }
+
+    fn execute_while_stmt(&mut self, stmt: &stmt::While) -> Result<()> {
+        let mut res = self.evaluate_ref(&stmt.condition)?;
+        while self.is_truthy(&res) {
+            self.execute(&stmt.body)?;
+            res = self.evaluate_ref(&stmt.condition)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -105,6 +147,16 @@ impl expr::Visitor<Result<Object>> for &mut Interpreter {
         Ok(obj)
     }
 
+    fn visit_logical(&mut self, expr: expr::Logical) -> Result<Object> {
+        let left = self.evaluate(*expr.left)?;
+
+        let truthy_left = self.is_truthy(&left);
+        match (expr.operator.typ, truthy_left) {
+            (TokenType::Or, true) | (TokenType::And, false) => Ok(left),
+            _ => self.evaluate(*expr.right),
+        }
+    }
+
     fn visit_grouping(&mut self, expr: expr::Grouping) -> Result<Object> {
         self.evaluate(*expr.expression)
     }
@@ -117,9 +169,7 @@ impl expr::Visitor<Result<Object>> for &mut Interpreter {
         let right = self.evaluate(*expr.right)?;
         let obj = match expr.operator.typ {
             TokenType::Minus => {
-                let n = right
-                    .into_number()
-                    .map_err(|e| e.into_lox(&expr.operator))?;
+                let n = right.into_number().map_err(|e| e.into_lox(&expr.operator))?;
                 Object::Number(-n)
             }
             TokenType::Bang => Object::Boolean(!self.is_truthy(&right)),
@@ -143,14 +193,23 @@ impl expr::Visitor<Result<Object>> for &mut Interpreter {
         Ok(value)
     }
 
-    fn visit_logical(&mut self, expr: expr::Logical) -> Result<Object> {
-        let left = self.evaluate(*expr.left)?;
-
-        let truthy_left = self.is_truthy(&left);
-        match (expr.operator.typ, truthy_left) {
-            (TokenType::Or, true) | (TokenType::And, false) => Ok(left),
-            _ => self.evaluate(*expr.right),
-        }
+    fn visit_call(&mut self, expr: expr::Call) -> Result<Object> {
+        // let callee = self.evaluate(*expr.callee)?;
+        //
+        // let arguments = Vec::new();
+        // for argument in expr.arguments {
+        //    arguments.push(self.evaluate(argument)?);
+        //}
+        // let function = callee;
+        // if arguments.len() != function.arity() {
+        //    return Err(LoxError::Runtime {
+        //        token: expr.paren,
+        //        expected: format!("{} arguments", function.arity()),
+        //        found: format!("{} arguments", arguments.len()),
+        //    });
+        //}
+        // function.call(self, arguments)
+        todo!()
     }
 }
 
@@ -176,6 +235,16 @@ impl expr::BorrowingVisitor<Result<Object>> for &mut Interpreter {
         Ok(obj)
     }
 
+    fn borrow_logical(&mut self, expr: &expr::Logical) -> Result<Object> {
+        let left = self.evaluate_ref(&expr.left)?;
+
+        let truthy_left = self.is_truthy(&left);
+        match (&expr.operator.typ, truthy_left) {
+            (&TokenType::Or, true) | (&TokenType::And, false) => Ok(left),
+            _ => self.evaluate_ref(&expr.right),
+        }
+    }
+
     fn borrow_grouping(&mut self, expr: &expr::Grouping) -> Result<Object> {
         self.evaluate_ref(&expr.expression)
     }
@@ -188,9 +257,7 @@ impl expr::BorrowingVisitor<Result<Object>> for &mut Interpreter {
         let right = self.evaluate_ref(&expr.right)?;
         let obj = match expr.operator.typ {
             TokenType::Minus => {
-                let n = right
-                    .into_number()
-                    .map_err(|e| e.into_lox(&expr.operator))?;
+                let n = right.into_number().map_err(|e| e.into_lox(&expr.operator))?;
                 Object::Number(-n)
             }
             TokenType::Bang => Object::Boolean(!self.is_truthy(&right)),
@@ -217,109 +284,7 @@ impl expr::BorrowingVisitor<Result<Object>> for &mut Interpreter {
         Ok(value)
     }
 
-    fn borrow_logical(&mut self, expr: &expr::Logical) -> Result<Object> {
-        let left = self.evaluate_ref(&expr.left)?;
-
-        let truthy_left = self.is_truthy(&left);
-        match (&expr.operator.typ, truthy_left) {
-            (&TokenType::Or, true) | (&TokenType::And, false) => Ok(left),
-            _ => self.evaluate_ref(&expr.right),
-        }
-    }
-}
-
-impl stmt::Visitor<Result<()>> for &mut Interpreter {
-    fn visit_block_stmt(&mut self, stmt: stmt::Block) -> Result<()> {
-        self.execute_block(&stmt.statements);
-        Ok(())
-    }
-    fn visit_expression_stmt(&mut self, stmt: stmt::Expression) -> Result<()> {
-        self.evaluate(stmt.expression)?;
-        Ok(())
-    }
-
-    fn visit_print_stmt(&mut self, stmt: stmt::Print) -> Result<()> {
-        let value = self.evaluate(stmt.expression)?;
-        println!("{}", value);
-        Ok(())
-    }
-
-    fn visit_var_stmt(&mut self, stmt: stmt::Var) -> Result<()> {
-        let value = match stmt.initializer {
-            Some(init) => self.evaluate(init)?,
-            None => Object::Null,
-        };
-
-        self.environment.define(stmt.name.lexeme, value);
-        Ok(())
-    }
-
-    fn visit_if_stmt(&mut self, stmt: stmt::If) -> Result<()> {
-        let res = self.evaluate(stmt.condition)?;
-        if self.is_truthy(&res) {
-            self.execute(*stmt.then_branch)?;
-        } else if let Some(eb) = stmt.else_branch {
-            self.execute(*eb)?;
-        }
-
-        Ok(())
-    }
-
-    fn visit_while_stmt(&mut self, stmt: stmt::While) -> Result<()> {
-        let mut res = self.evaluate_ref(&stmt.condition)?;
-        while self.is_truthy(&res) {
-            self.execute_ref(&stmt.body)?;
-            res = self.evaluate_ref(&stmt.condition)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl stmt::BorrowingVisitor<Result<()>> for &mut Interpreter {
-    fn borrow_block_stmt(&mut self, stmt: &stmt::Block) -> Result<()> {
-        self.execute_block(&stmt.statements);
-        Ok(())
-    }
-    fn borrow_expression_stmt(&mut self, stmt: &stmt::Expression) -> Result<()> {
-        self.evaluate_ref(&stmt.expression)?;
-        Ok(())
-    }
-
-    fn borrow_print_stmt(&mut self, stmt: &stmt::Print) -> Result<()> {
-        let value = self.evaluate_ref(&stmt.expression)?;
-        println!("{}", value);
-        Ok(())
-    }
-
-    fn borrow_var_stmt(&mut self, stmt: &stmt::Var) -> Result<()> {
-        let value = match stmt.initializer {
-            Some(ref init) => self.evaluate_ref(init)?,
-            None => Object::Null,
-        };
-
-        self.environment.define(stmt.name.lexeme.clone(), value);
-        Ok(())
-    }
-
-    fn borrow_if_stmt(&mut self, stmt: &stmt::If) -> Result<()> {
-        let res = self.evaluate_ref(&stmt.condition)?;
-        if self.is_truthy(&res) {
-            self.execute_ref(&stmt.then_branch)?;
-        } else if let Some(ref eb) = stmt.else_branch {
-            self.execute_ref(eb)?;
-        }
-
-        Ok(())
-    }
-
-    fn borrow_while_stmt(&mut self, stmt: &stmt::While) -> Result<()> {
-        let mut res = self.evaluate_ref(&stmt.condition)?;
-        while self.is_truthy(&res) {
-            self.execute_ref(&stmt.body)?;
-            res = self.evaluate_ref(&stmt.condition)?;
-        }
-
-        Ok(())
+    fn borrow_call(&mut self, expr: &expr::Call) -> Result<Object> {
+        todo!()
     }
 }

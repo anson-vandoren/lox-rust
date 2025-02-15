@@ -2,7 +2,7 @@ use std::{cmp, ops};
 
 use snafu::Snafu;
 
-use crate::{token::Token, LoxError};
+use crate::{interpreter::Interpreter, lox_callable::LoxCallable, token::Token, LoxError};
 
 #[derive(Clone, Debug)]
 pub enum Object {
@@ -12,11 +12,26 @@ pub enum Object {
     Boolean(bool),
 }
 
+//impl LoxCallable for Object {
+//    fn call(&self, interpreter: Interpreter, arguments: Vec<Object>) -> Result<Object> {
+//        match self {
+//            _ => Err(ObjectRuntimeError {
+//                found: format!("{:?}", self),
+//                expected: "A function or class".to_string(),
+//            }),
+//        }
+//    }
+//
+//    fn arity(&self) -> u8 {
+//        todo!()
+//    }
+//}
+
 #[derive(Debug, Snafu)]
 #[snafu(display("Object comparison error: expected {expected}, but found {found}"))]
 pub struct ObjectRuntimeError {
-    found: String,
-    expected: String,
+    pub found: String,
+    pub expected: String,
 }
 
 impl ObjectRuntimeError {

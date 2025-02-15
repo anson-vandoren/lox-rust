@@ -1,7 +1,8 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, Data, DeriveInput, Fields, GenericArgument, Ident, PathArguments, Type,
+    AngleBracketedGenericArguments, Data, DeriveInput, Fields, GenericArgument, Ident,
+    PathArguments, PathSegment, Type, parse_macro_input,
 };
 
 #[proc_macro_derive(ExpressionType)]
@@ -87,6 +88,19 @@ pub fn derive_expression_type(input: TokenStream) -> TokenStream {
 fn deboxed(ty: &Type) -> (&Type, bool) {
     if let Type::Path(type_path) = ty {
         if let Some(segment) = type_path.path.segments.last() {
+            if !matches!(
+                segment,
+                PathSegment {
+                    ident,
+                    arguments: PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+                        args: _,
+                        ..
+                    })
+                }
+                if *ident.to_string() == *"Box"
+            ) {
+                return (ty, false);
+            }
             if let PathArguments::AngleBracketed(ref args) = segment.arguments {
                 if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
                     return (inner_ty, true);
