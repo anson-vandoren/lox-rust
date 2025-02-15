@@ -1,5 +1,4 @@
 mod ast_printer;
-mod environment;
 mod expr;
 mod interpreter;
 mod lox_callable;
@@ -117,7 +116,6 @@ impl Lox {
                 eprintln!("{}", err);
             }
         }
-
         Ok(())
     }
 }

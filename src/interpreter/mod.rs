@@ -1,20 +1,32 @@
+mod environment;
+
 use std::rc::Rc;
 
+use environment::Environment;
 use tracing::instrument;
 
+use super::{LoxError, Result};
 use crate::{
-    environment::Environment,
     expr::{self, Expr},
     native::clock::LoxClock,
     object::Object,
     stmt::{self, Stmt},
     token_type::TokenType,
-    LoxError, Result,
 };
 
 pub struct Interpreter {
     environment: Box<Environment>,
     globals: Environment,
+}
+
+impl Default for Interpreter {
+    fn default() -> Self {
+        let bare = Box::new(Environment::new());
+        Self {
+            environment: bare.clone(),
+            globals: *bare,
+        }
+    }
 }
 
 impl Interpreter {
@@ -57,14 +69,6 @@ impl Interpreter {
             Expr::Variable(expr) => self.eval_variable(expr),
             Expr::Assign(expr) => self.eval_assign(expr), // TODO: this is what makes it mut
             Expr::Call(expr) => self.eval_call(expr),
-        }
-    }
-
-    fn is_truthy(&self, obj: &Object) -> bool {
-        match obj {
-            Object::Null => false,
-            Object::Boolean(b) => *b,
-            _ => true,
         }
     }
 
@@ -112,7 +116,7 @@ impl Interpreter {
 
     fn execute_if_stmt(&mut self, stmt: &stmt::If) -> Result<()> {
         let res = self.evaluate(&stmt.condition)?;
-        if self.is_truthy(&res) {
+        if res.is_truthy() {
             self.execute(&stmt.then_branch)?;
         } else if let Some(ref eb) = stmt.else_branch {
             self.execute(eb)?;
@@ -123,7 +127,7 @@ impl Interpreter {
 
     fn execute_while_stmt(&mut self, stmt: &stmt::While) -> Result<()> {
         let mut res = self.evaluate(&stmt.condition)?;
-        while self.is_truthy(&res) {
+        while res.is_truthy() {
             self.execute(&stmt.body)?;
             res = self.evaluate(&stmt.condition)?;
         }
@@ -155,7 +159,7 @@ impl Interpreter {
     fn eval_logical(&mut self, expr: &expr::Logical) -> Result<Object> {
         let left = self.evaluate(&expr.left)?;
 
-        let truthy_left = self.is_truthy(&left);
+        let truthy_left = left.is_truthy();
         match (&expr.operator.typ, truthy_left) {
             (&TokenType::Or, true) | (&TokenType::And, false) => Ok(left),
             _ => self.evaluate(&expr.right),
@@ -178,7 +182,7 @@ impl Interpreter {
                 let n = right.into_number().map_err(|e| e.into_lox(&expr.operator))?;
                 Object::Number(-n)
             }
-            TokenType::Bang => Object::Boolean(!self.is_truthy(&right)),
+            TokenType::Bang => Object::Boolean(!right.is_truthy()),
             _ => {
                 let token = expr.operator.clone(); // TODO: clone
                 Err(LoxError::Runtime {
@@ -203,11 +207,10 @@ impl Interpreter {
     }
 
     fn eval_call(&mut self, expr: &expr::Call) -> Result<Object> {
-        // let callee = self.evaluate(*expr.callee)?;
-        //
+        // let callee = self.evaluate(&expr.callee)?;
         // let arguments = Vec::new();
         // for argument in expr.arguments {
-        //    arguments.push(self.evaluate(argument)?);
+        //    arguments.push(self.evaluate(&argument)?);
         //}
         // let function = callee;
         // if arguments.len() != function.arity() {

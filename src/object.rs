@@ -13,6 +13,16 @@ pub enum Object {
     Callable(Rc<dyn LoxCallable>),
 }
 
+impl Object {
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Object::Null => false,
+            Object::Boolean(b) => *b,
+            _ => true,
+        }
+    }
+}
+
 impl fmt::Debug for Object {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
