@@ -1,4 +1,4 @@
-use crate::{interpreter::Interpreter, object::Object, Result};
+use crate::{Result, interpreter::Interpreter, object::Object};
 
 pub trait LoxCallable {
     fn call(&self, interpreter: Interpreter, arguments: Vec<Object>) -> Result<Object>;

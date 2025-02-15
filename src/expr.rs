@@ -77,19 +77,6 @@ impl std::fmt::Debug for Expr {
 }
 
 impl Expr {
-    pub fn accept<T>(self, visitor: impl Visitor<T>) -> T {
-        match self {
-            Self::Binary(expr) => expr.accept(visitor),
-            Self::Logical(expr) => expr.accept(visitor),
-            Self::Grouping(expr) => expr.accept(visitor),
-            Self::Literal(expr) => expr.accept(visitor),
-            Self::Unary(expr) => expr.accept(visitor),
-            Self::Variable(expr) => expr.accept(visitor),
-            Self::Assign(expr) => expr.accept(visitor),
-            Self::Call(expr) => expr.accept(visitor),
-        }
-    }
-
     pub fn accept_borrowed<T>(&self, visitor: impl BorrowingVisitor<T>) -> T {
         match self {
             Self::Binary(expr) => expr.accept_borrowed(visitor),
@@ -102,17 +89,6 @@ impl Expr {
             Self::Call(expr) => expr.accept_borrowed(visitor),
         }
     }
-}
-
-pub trait Visitor<T> {
-    fn visit_binary(&mut self, expr: Binary) -> T;
-    fn visit_logical(&mut self, expr: Logical) -> T;
-    fn visit_grouping(&mut self, expr: Grouping) -> T;
-    fn visit_literal(&self, expr: Literal) -> T;
-    fn visit_unary(&mut self, expr: Unary) -> T;
-    fn visit_variable(&self, expr: Variable) -> T;
-    fn visit_assign(&mut self, expr: Assign) -> T;
-    fn visit_call(&mut self, expr: Call) -> T;
 }
 
 pub trait BorrowingVisitor<T> {

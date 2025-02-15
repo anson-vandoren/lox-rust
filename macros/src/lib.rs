@@ -1,8 +1,7 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    AngleBracketedGenericArguments, Data, DeriveInput, Fields, GenericArgument, Ident,
-    PathArguments, PathSegment, Type, parse_macro_input,
+    parse_macro_input, AngleBracketedGenericArguments, Data, DeriveInput, Fields, GenericArgument, Ident, PathArguments, PathSegment, Type,
 };
 
 #[proc_macro_derive(ExpressionType)]
@@ -57,7 +56,6 @@ pub fn derive_expression_type(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let visitor_name = format_ident!("visit_{}", name.to_string().to_lowercase());
     let borrowing_visitor_name = format_ident!("borrow_{}", name.to_string().to_lowercase());
 
     let expanded = quote! {
@@ -70,10 +68,6 @@ pub fn derive_expression_type(input: TokenStream) -> TokenStream {
                 Self {
                     #(#field_assigns),*
                 }
-            }
-
-            fn accept<T>(self, mut visitor: impl Visitor<T>) -> T {
-                visitor.#visitor_name(self)
             }
 
             fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {

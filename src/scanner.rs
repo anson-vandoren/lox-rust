@@ -1,6 +1,6 @@
 use tracing::{error, instrument};
 
-use crate::{object::Object, token::Token, token_type::TokenType, LoxError, Result};
+use crate::{LoxError, Result, object::Object, token::Token, token_type::TokenType};
 
 pub struct Scanner {
     source: String,
@@ -21,23 +21,18 @@ impl Scanner {
         }
     }
 
-    #[instrument(skip(self), err, level="trace")]
+    #[instrument(skip(self), err, level = "trace")]
     pub fn scan_tokens(mut self) -> Result<Vec<Token>> {
         let mut had_error = false;
         let eof = self.source.len();
 
         while self.current < eof {
             self.start = self.current;
-            if self
-                .scan_token()
-                .map_err(|error| error!(?error, "Error while scanning"))
-                .is_err()
-            {
+            if self.scan_token().map_err(|error| error!(?error, "Error while scanning")).is_err() {
                 had_error = true;
             }
         }
-        self.tokens
-            .push(Token::new(TokenType::Eof, "", Object::Null, self.line));
+        self.tokens.push(Token::new(TokenType::Eof, "", Object::Null, self.line));
 
         match had_error {
             false => Ok(self.tokens),
@@ -49,11 +44,7 @@ impl Scanner {
     fn scan_token(&mut self) -> Result<()> {
         let c = self.advance();
         let mut if_equals_else = |is_equal: TokenType, not_equal: TokenType| {
-            let token_type = if self.advance_if_is('=') {
-                is_equal
-            } else {
-                not_equal
-            };
+            let token_type = if self.advance_if_is('=') { is_equal } else { not_equal };
             self.add_token(token_type);
         };
         match c {
@@ -129,8 +120,7 @@ impl Scanner {
 
     fn add_token_with_literal(&mut self, token_type: TokenType, literal: Object) {
         let text = &self.source[self.start..self.current];
-        self.tokens
-            .push(Token::new(token_type, text, literal, self.line))
+        self.tokens.push(Token::new(token_type, text, literal, self.line))
     }
 
     fn advance_if_is(&mut self, expected: char) -> bool {
@@ -198,9 +188,7 @@ impl Scanner {
             self.advance();
         }
 
-        let as_float: f64 = self.source[self.start..self.current]
-            .parse::<f64>()
-            .expect("Better be a number");
+        let as_float: f64 = self.source[self.start..self.current].parse::<f64>().expect("Better be a number");
         self.add_token_with_literal(TokenType::Number, Object::Number(as_float))
     }
 

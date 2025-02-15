@@ -8,10 +8,7 @@ impl AstPrinter {
     }
 
     fn parenthesize(&self, name: &str, exprs: &[&Expr]) -> String {
-        let parts: Vec<_> = exprs
-            .iter()
-            .map(|expr| expr.accept_borrowed(self))
-            .collect();
+        let parts: Vec<_> = exprs.iter().map(|expr| expr.accept_borrowed(self)).collect();
         format!("({} {})", name, parts.join(" "))
     }
 }
@@ -62,10 +59,7 @@ mod test {
     #[test]
     fn does_the_thing() {
         let expr = Binary::expr(
-            Unary::expr(
-                Token::new(TokenType::Minus, "-", ().into(), 1),
-                Literal::expr(123_f64.into()),
-            ),
+            Unary::expr(Token::new(TokenType::Minus, "-", ().into(), 1), Literal::expr(123_f64.into())),
             Token::new(TokenType::Star, "*", ().into(), 1),
             Grouping::expr(Literal::expr(45.67.into())),
         );

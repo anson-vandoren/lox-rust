@@ -2,7 +2,7 @@ use std::{cmp, ops};
 
 use snafu::Snafu;
 
-use crate::{interpreter::Interpreter, lox_callable::LoxCallable, token::Token, LoxError};
+use crate::{LoxError, interpreter::Interpreter, lox_callable::LoxCallable, token::Token};
 
 #[derive(Clone, Debug)]
 pub enum Object {

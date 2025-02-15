@@ -1,9 +1,9 @@
 use crate::{
+    LoxError, Result,
     expr::{Assign, Binary, Call, Expr, Grouping, Literal, Logical, Unary, Variable},
     stmt::{Block, Expression, If, Print, Stmt, Var, While},
     token::Token,
     token_type::TokenType,
-    LoxError, Result,
 };
 
 pub struct Parser {
@@ -29,11 +29,7 @@ impl Parser {
                 }
             }
         }
-        if had_error {
-            Err(LoxError::Fatal)
-        } else {
-            Ok(statements)
-        }
+        if had_error { Err(LoxError::Fatal) } else { Ok(statements) }
     }
 }
 
@@ -54,10 +50,7 @@ impl Parser {
         } else {
             None
         };
-        self.consume(
-            TokenType::Semicolon,
-            "Expect ';' after variable declaration",
-        )?;
+        self.consume(TokenType::Semicolon, "Expect ';' after variable declaration")?;
 
         Ok(Var::stmt(name, initializer))
     }
@@ -265,12 +258,7 @@ impl Parser {
 
     fn comparison(&mut self) -> Result<Expr> {
         let mut expr = self.term()?;
-        while self.match_advance(&[
-            TokenType::Greater,
-            TokenType::GreaterEqual,
-            TokenType::Less,
-            TokenType::LessEqual,
-        ]) {
+        while self.match_advance(&[TokenType::Greater, TokenType::GreaterEqual, TokenType::Less, TokenType::LessEqual]) {
             let operator = self.previous();
             let right = self.term()?;
             expr = Binary::expr(expr, operator, right);

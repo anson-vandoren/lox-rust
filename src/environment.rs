@@ -47,7 +47,7 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, name: Token) -> Result<Object> {
+    pub fn get(&self, name: &Token) -> Result<Object> {
         match self.values.get(&name.lexeme) {
             Some(val) => Ok(val.clone()),
             None => {
@@ -56,8 +56,8 @@ impl Environment {
                 } else {
                     Err(LoxError::Runtime {
                         expected: "Defined variable name".to_string(),
-                        found: name.lexeme.clone(),
-                        token: name,
+                        found: name.lexeme.clone(), // TODO: clone
+                        token: name.clone(),        // TODO: clone
                     })
                 }
             }

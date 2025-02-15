@@ -1,5 +1,7 @@
-use crate::object::ObjectRuntimeError;
-use crate::stmt::{Function, Stmt};
+use crate::{
+    object::ObjectRuntimeError,
+    stmt::{Function, Stmt},
+};
 
 pub struct LoxFunction {
     declaration: Function,
