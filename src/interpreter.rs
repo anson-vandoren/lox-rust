@@ -28,9 +28,9 @@ impl Interpreter {
     }
 
     #[instrument(skip(self, statements), err, ret, level = "trace")]
-    pub fn interpret(&mut self, statements: &Vec<Stmt>) -> Result<()> {
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
         for statement in statements {
-            self.execute(statement)?;
+            self.execute(&statement)?;
         }
         Ok(())
     }

@@ -196,15 +196,13 @@ impl cmp::PartialOrd for Object {
 
 impl cmp::PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
-        match self {
-            Object::String(s) => other.as_string().map(|o| o == s).unwrap_or(false),
-            Object::Null => matches!(other, Object::Null),
-            Object::Number(s) => other.as_number().map(|o| o == s).unwrap_or(false),
-            Object::Boolean(s) => other.as_bool().map(|o| o == s).unwrap_or(false),
-            Object::Callable(s) => match other {
-                Object::Callable(other) => s.arity() == other.arity() && s.name() == other.name(),
-                _ => false,
-            },
+        match (self, other) {
+            (Object::String(s1), Object::String(s2)) => s1 == s2,
+            (Object::Null, Object::Null) => true,
+            (Object::Number(n1), Object::Number(n2)) => n1 == n2,
+            (Object::Boolean(b1), Object::Boolean(b2)) => b1 == b2,
+            (Object::Callable(c1), Object::Callable(c2)) => c1.name() == c2.name() && c1.arity() == c2.arity(),
+            _ => false,
         }
     }
 }

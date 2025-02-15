@@ -108,7 +108,7 @@ impl Lox {
         let stmts = parser.parse();
         match stmts {
             Ok(s) => {
-                self.interpreter.interpret(&s).inspect_err(|_| {
+                self.interpreter.interpret(s).inspect_err(|_| {
                     self.had_runtime_error = true;
                 })?;
             }
