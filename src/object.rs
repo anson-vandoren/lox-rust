@@ -1,31 +1,53 @@
-use std::{cmp, ops};
+use std::{cmp, fmt, ops, rc::Rc};
 
 use snafu::Snafu;
 
-use crate::{LoxError, interpreter::Interpreter, lox_callable::LoxCallable, token::Token};
+use crate::{interpreter::Interpreter, lox_callable::LoxCallable, token::Token, LoxError};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Object {
     String(String),
     Null,
     Number(f64),
     Boolean(bool),
+    Callable(Rc<dyn LoxCallable>),
 }
 
-//impl LoxCallable for Object {
-//    fn call(&self, interpreter: Interpreter, arguments: Vec<Object>) -> Result<Object> {
-//        match self {
-//            _ => Err(ObjectRuntimeError {
-//                found: format!("{:?}", self),
-//                expected: "A function or class".to_string(),
-//            }),
-//        }
-//    }
-//
-//    fn arity(&self) -> u8 {
-//        todo!()
-//    }
-//}
+impl fmt::Debug for Object {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Object::String(s) => write!(f, "\"{}\"", &s),
+            Object::Null => fmt::Formatter::write_str(f, "Null"),
+            Object::Number(n) => write!(f, "{}", &n),
+            Object::Boolean(b) => write!(f, "{}", &b),
+            Object::Callable(c) => write!(f, "callable <{}>", &c.name()),
+        }
+    }
+}
+
+impl LoxCallable for Object {
+    fn call(&self, interpreter: Interpreter, arguments: Vec<Object>) -> Result<Object> {
+        match self {
+            Self::Callable(c) => c.call(interpreter, arguments),
+            _ => panic!("{:?} is not a LoxCallable", &self),
+        }
+    }
+
+    fn arity(&self) -> u8 {
+        match self {
+            Self::Callable(c) => c.arity(),
+            _ => panic!("{:?} is not a LoxCallable", &self),
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Callable(c) => c.name(),
+            _ => panic!("{:?} is not a LoxCallable", &self),
+        }
+    }
+}
 
 #[derive(Debug, Snafu)]
 #[snafu(display("Object comparison error: expected {expected}, but found {found}"))]
@@ -179,6 +201,10 @@ impl cmp::PartialEq for Object {
             Object::Null => matches!(other, Object::Null),
             Object::Number(s) => other.as_number().map(|o| o == s).unwrap_or(false),
             Object::Boolean(s) => other.as_bool().map(|o| o == s).unwrap_or(false),
+            Object::Callable(s) => match other {
+                Object::Callable(other) => s.arity() == other.arity() && s.name() == other.name(),
+                _ => false,
+            },
         }
     }
 }
@@ -207,12 +233,12 @@ impl From<bool> for Object {
     }
 }
 
-impl std::fmt::Display for Object {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::String(s) => write!(f, "{}", s),
-            Self::Null => write!(f, "nil"),
-            Self::Number(n) => {
+            Object::String(s) => write!(f, "{}", s),
+            Object::Null => write!(f, "nil"),
+            Object::Number(n) => {
                 if n.fract() == 0.0 {
                     // Don't print decimal places for integers
                     write!(f, "{}", n.trunc())
@@ -220,7 +246,8 @@ impl std::fmt::Display for Object {
                     write!(f, "{}", n)
                 }
             }
-            Self::Boolean(b) => write!(f, "{}", b),
+            Object::Boolean(b) => write!(f, "{}", b),
+            Object::Callable(c) => write!(f, "callable <{}>", c.name()),
         }
     }
 }

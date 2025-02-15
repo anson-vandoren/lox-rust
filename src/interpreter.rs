@@ -1,12 +1,15 @@
+use std::rc::Rc;
+
 use tracing::instrument;
 
 use crate::{
-    LoxError, Result,
     environment::Environment,
     expr::{self, Expr},
+    native::clock::LoxClock,
     object::Object,
     stmt::{self, Stmt},
     token_type::TokenType,
+    LoxError, Result,
 };
 
 pub struct Interpreter {
@@ -16,8 +19,8 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        let globals = Environment::new();
-        // globals.define("clock".to_string(), LoxClock {});
+        let mut globals = Environment::new();
+        globals.define("clock".to_string(), Object::Callable(Rc::new(LoxClock {})));
         Self {
             environment: Box::new(globals.clone()),
             globals,
