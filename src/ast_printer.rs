@@ -1,48 +1,56 @@
-use crate::expr::{Assign, Binary, BorrowingVisitor, Expr, Grouping, Literal, Unary, Variable};
+use crate::expr::{Assign, Binary, Expr, Grouping, Literal, Unary, Variable};
 
 pub struct AstPrinter {}
 
 impl AstPrinter {
-    pub fn print(&self, expr: Expr) -> String {
-        expr.accept_borrowed::<String>(self)
+    #[allow(unused)]
+    pub fn print(&self, expr: &Expr) -> String {
+        match expr {
+            Expr::Binary(expr) => self.print_binary(expr),
+            Expr::Logical(expr) => self.print_logical(expr),
+            Expr::Grouping(expr) => self.print_grouping(expr),
+            Expr::Literal(expr) => self.print_literal(expr),
+            Expr::Unary(expr) => self.print_unary(expr),
+            Expr::Variable(expr) => self.print_variable(expr),
+            Expr::Assign(expr) => self.print_assign(expr),
+            Expr::Call(expr) => self.print_call(expr),
+        }
     }
 
     fn parenthesize(&self, name: &str, exprs: &[&Expr]) -> String {
-        let parts: Vec<_> = exprs.iter().map(|expr| expr.accept_borrowed(self)).collect();
+        let parts: Vec<_> = exprs.iter().map(|expr| self.print(expr)).collect();
         format!("({} {})", name, parts.join(" "))
     }
-}
 
-impl BorrowingVisitor<String> for &AstPrinter {
-    fn borrow_binary(&mut self, expr: &Binary) -> String {
+    fn print_binary(&self, expr: &Binary) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
     }
 
-    fn borrow_logical(&mut self, expr: &crate::expr::Logical) -> String {
+    fn print_logical(&self, expr: &crate::expr::Logical) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.left, &*expr.right])
     }
 
-    fn borrow_grouping(&mut self, expr: &Grouping) -> String {
+    fn print_grouping(&self, expr: &Grouping) -> String {
         self.parenthesize("group", &[&*expr.expression])
     }
 
-    fn borrow_literal(&mut self, expr: &Literal) -> String {
+    fn print_literal(&self, expr: &Literal) -> String {
         expr.value.to_string()
     }
 
-    fn borrow_unary(&mut self, expr: &Unary) -> String {
+    fn print_unary(&self, expr: &Unary) -> String {
         self.parenthesize(&expr.operator.lexeme, &[&*expr.right])
     }
 
-    fn borrow_variable(&mut self, expr: &Variable) -> String {
+    fn print_variable(&self, expr: &Variable) -> String {
         expr.name.to_string()
     }
 
-    fn borrow_assign(&mut self, expr: &Assign) -> String {
+    fn print_assign(&self, expr: &Assign) -> String {
         self.parenthesize("assign", &[&*expr.value])
     }
 
-    fn borrow_call(&mut self, expr: &crate::expr::Call) -> String {
+    fn print_call(&self, expr: &crate::expr::Call) -> String {
         todo!()
     }
 }
@@ -64,6 +72,6 @@ mod test {
             Grouping::expr(Literal::expr(45.67.into())),
         );
         let printer = AstPrinter {};
-        assert_eq!(printer.print(expr), "(* (- 123) (group 45.67))".to_string());
+        assert_eq!(printer.print(&expr), "(* (- 123) (group 45.67))".to_string());
     }
 }

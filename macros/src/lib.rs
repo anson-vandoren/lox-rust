@@ -56,8 +56,6 @@ pub fn derive_expression_type(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let borrowing_visitor_name = format_ident!("borrow_{}", name.to_string().to_lowercase());
-
     let expanded = quote! {
         impl #name {
             pub fn expr(#(#field_names: #deboxed_types),*) -> Expr {
@@ -68,10 +66,6 @@ pub fn derive_expression_type(input: TokenStream) -> TokenStream {
                 Self {
                     #(#field_assigns),*
                 }
-            }
-
-            fn accept_borrowed<T>(&self, mut visitor: impl BorrowingVisitor<T>) -> T {
-                visitor.#borrowing_visitor_name(self)
             }
         }
     };
