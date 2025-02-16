@@ -1,6 +1,7 @@
+use ordered_float::OrderedFloat;
 use tracing::{error, instrument};
 
-use crate::{LoxError, Result, object::Object, token::Token, token_type::TokenType};
+use crate::{object::Object, token::Token, token_type::TokenType, LoxError, Result};
 
 pub struct Scanner {
     source: String,
@@ -189,7 +190,7 @@ impl Scanner {
         }
 
         let as_float: f64 = self.source[self.start..self.current].parse::<f64>().expect("Better be a number");
-        self.add_token_with_literal(TokenType::Number, Object::Number(as_float))
+        self.add_token_with_literal(TokenType::Number, Object::Number(OrderedFloat(as_float)))
     }
 
     fn identifier(&mut self) {

@@ -1,5 +1,6 @@
 use std::{cmp, fmt, ops, rc::Rc};
 
+use ordered_float::OrderedFloat;
 use snafu::Snafu;
 
 use crate::{interpreter::Interpreter, lox_callable::LoxCallable, token::Token, LoxError};
@@ -8,9 +9,26 @@ use crate::{interpreter::Interpreter, lox_callable::LoxCallable, token::Token, L
 pub enum Object {
     String(String),
     Null,
-    Number(f64),
+    Number(OrderedFloat<f64>),
     Boolean(bool),
     Callable(Rc<dyn LoxCallable>),
+}
+
+impl Eq for Object {}
+
+impl std::hash::Hash for Object {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Object::String(s) => s.hash(state),
+            Object::Null => core::mem::discriminant(self).hash(state),
+            Object::Number(of) => of.hash(state),
+            Object::Boolean(b) => b.hash(state),
+            Object::Callable(c) => {
+                c.arity().hash(state);
+                c.name().hash(state);
+            }
+        }
+    }
 }
 
 impl Object {
@@ -81,7 +99,7 @@ type Result<T> = std::result::Result<T, ObjectRuntimeError>;
 impl Object {
     pub fn into_number(self) -> Result<f64> {
         match self {
-            Object::Number(n) => Ok(n),
+            Object::Number(n) => Ok(*n),
             _ => Err(ObjectRuntimeError {
                 found: self.to_string(),
                 expected: "f64".to_string(),
@@ -137,7 +155,7 @@ impl ops::Add for Object {
         if matches!(self, Object::Number(_)) && matches!(rhs, Object::Number(_)) {
             let lhs = self.into_number()?;
             let rhs = rhs.into_number()?;
-            return Ok(Object::Number(lhs + rhs));
+            return Ok(Object::Number(OrderedFloat(lhs + rhs)));
         }
         if matches!(self, Object::String(_)) && matches!(rhs, Object::String(_)) {
             let lhs = self.into_string()?;
@@ -158,7 +176,7 @@ impl ops::Sub for Object {
     fn sub(self, rhs: Self) -> Self::Output {
         let lhs = self.into_number()?;
         let rhs = rhs.into_number()?;
-        Ok(Object::Number(lhs - rhs))
+        Ok(Object::Number(OrderedFloat(lhs - rhs)))
     }
 }
 
@@ -182,7 +200,7 @@ impl ops::Div for Object {
     fn div(self, rhs: Self) -> Self::Output {
         let lhs = self.into_number()?;
         let rhs = rhs.into_number()?;
-        Ok(Object::Number(lhs / rhs))
+        Ok(Object::Number(OrderedFloat(lhs / rhs)))
     }
 }
 
@@ -192,7 +210,7 @@ impl ops::Mul for Object {
     fn mul(self, rhs: Self) -> Self::Output {
         let lhs = self.into_number()?;
         let rhs = rhs.into_number()?;
-        Ok(Object::Number(lhs * rhs))
+        Ok(Object::Number(OrderedFloat(lhs * rhs)))
     }
 }
 
@@ -225,7 +243,7 @@ impl From<String> for Object {
 
 impl From<f64> for Object {
     fn from(value: f64) -> Self {
-        Object::Number(value)
+        Object::Number(OrderedFloat(value))
     }
 }
 

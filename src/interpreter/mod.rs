@@ -1,8 +1,10 @@
 pub mod environment;
+pub mod resolver;
 
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use environment::Environment;
+use ordered_float::OrderedFloat;
 use tracing::instrument;
 
 use super::{LoxError, Result};
@@ -19,6 +21,7 @@ use crate::{
 pub struct Interpreter {
     environment: Box<Environment>,
     pub globals: Environment,
+    locals: HashMap<Expr, u8>,
 }
 
 impl Default for Interpreter {
@@ -27,6 +30,7 @@ impl Default for Interpreter {
         Self {
             environment: bare.clone(),
             globals: *bare,
+            locals: HashMap::new(),
         }
     }
 }
@@ -38,6 +42,7 @@ impl Interpreter {
         Self {
             environment: Box::new(globals.clone()),
             globals,
+            locals: HashMap::new(),
         }
     }
 
@@ -69,8 +74,8 @@ impl Interpreter {
             Expr::Grouping(expr) => self.eval_grouping(expr),
             Expr::Literal(expr) => self.eval_literal(expr),
             Expr::Unary(expr) => self.eval_unary(expr),
-            Expr::Variable(expr) => self.eval_variable(expr),
-            Expr::Assign(expr) => self.eval_assign(expr), // TODO: this is what makes it mut
+            Expr::Variable(_var) => self.eval_variable(expr),
+            Expr::Assign(_assign) => self.eval_assign(expr),
             Expr::Call(expr) => self.eval_call(expr),
         }
     }
@@ -203,7 +208,7 @@ impl Interpreter {
         let obj = match expr.operator.typ {
             TokenType::Minus => {
                 let n = right.into_number().map_err(|e| e.into_lox(&expr.operator))?;
-                Object::Number(-n)
+                Object::Number(OrderedFloat(-n))
             }
             TokenType::Bang => Object::Boolean(!right.is_truthy()),
             _ => {
@@ -219,14 +224,26 @@ impl Interpreter {
         Ok(obj)
     }
 
-    fn eval_variable(&mut self, expr: &expr::Variable) -> Result<Object> {
-        self.environment.get(&expr.name)
+    fn eval_variable(&mut self, expr: &Expr) -> Result<Object> {
+        self.lookup_variable(expr)
     }
 
-    fn eval_assign(&mut self, expr: &expr::Assign) -> Result<Object> {
-        let value = self.evaluate(&expr.value)?;
-        self.environment.assign(&expr.name, value.clone())?; // TODO: clone
-        Ok(value)
+    fn eval_assign(&mut self, expr: &Expr) -> Result<Object> {
+        if let Expr::Assign(assign) = expr {
+            let name = &assign.name;
+            let value = self.evaluate(&assign.value)?;
+            let distance = self.locals.get(expr);
+            if let Some(distance) = distance {
+                self.environment.assign_at(distance, name, value.clone());
+            } else {
+                self.globals.assign(name, value.clone());
+            }
+            Ok(value)
+        } else {
+            Err(LoxError::Internal {
+                message: format!("Tried to assign with expr type {expr:?}"),
+            })
+        }
     }
 
     fn eval_call(&mut self, expr: &expr::Call) -> Result<Object> {
@@ -244,5 +261,22 @@ impl Interpreter {
             });
         }
         function.call(self, arguments).map_err(|e| e.into_lox(&expr.paren))
+    }
+
+    fn resolve(&mut self, expr: &Expr, i: u8) {
+        self.locals.insert(expr.clone(), i);
+    }
+
+    fn lookup_variable(&self, expr: &Expr) -> Result<Object> {
+        match expr {
+            Expr::Variable(var) | Expr::Assign(var) => {
+                if let Some(distance) = self.locals.get(expr) {
+                    self.environment.get_at(distance, &var.name.lexeme)
+                } else {
+                    self.globals.get(&var.name)
+                }
+            }
+            _ => panic!("Tried to lookup from invalid Expr type"),
+        }
     }
 }

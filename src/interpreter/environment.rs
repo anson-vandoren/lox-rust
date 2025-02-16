@@ -47,6 +47,11 @@ impl Environment {
         }
     }
 
+    pub fn assign_at(&mut self, distance: &u8, name: &Token, value: Object) -> Result<()> {
+        self.ancestor(distance).values.insert(name.lexeme.clone(), value);
+        Ok(())
+    }
+
     pub fn get(&self, name: &Token) -> Result<Object> {
         match self.values.get(&name.lexeme) {
             Some(val) => Ok(val.clone()),
@@ -62,5 +67,19 @@ impl Environment {
                 }
             }
         }
+    }
+
+    pub fn get_at(&mut self, distance: &u8, key: &str) -> Result<Object> {
+        self.ancestor(distance).values.get(key).cloned().ok_or(LoxError::Internal {
+            message: format!("Expected variable '{key}' at distance {distance}"),
+        })
+    }
+
+    fn ancestor(&mut self, distance: &u8) -> &mut Environment {
+        let mut env = self;
+        for _ in 0_u8..*distance {
+            env = &mut *env.enclosing.as_mut().expect("Should have had an enclosing scope");
+        }
+        env
     }
 }

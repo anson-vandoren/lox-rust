@@ -14,7 +14,7 @@ mod token_type;
 use std::{env, path::Path};
 
 use ast_printer::AstPrinter;
-use interpreter::Interpreter;
+use interpreter::{resolver::Resolver, Interpreter};
 use object::Object;
 use parser::Parser;
 use scanner::Scanner;
@@ -108,6 +108,8 @@ impl Lox {
         let stmts = parser.parse();
         match stmts {
             Ok(s) => {
+                let mut resolver = Resolver::new(&self.interpreter);
+                resolver.resolve_all(s);
                 self.interpreter.interpret(s).inspect_err(|_| {
                     self.had_runtime_error = true;
                 })?;

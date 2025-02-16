@@ -1,5 +1,7 @@
 use std::time::SystemTime;
 
+use ordered_float::OrderedFloat;
+
 use crate::{
     interpreter::Interpreter,
     lox_callable::LoxCallable,
@@ -16,12 +18,12 @@ impl std::fmt::Display for LoxClock {
 
 impl LoxCallable for LoxClock {
     fn call(&self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
-        Ok(Object::Number(
+        Ok(Object::Number(OrderedFloat(
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .expect("Unix Epoch was a long damn time ago")
                 .as_secs() as f64,
-        ))
+        )))
     }
 
     fn arity(&self) -> u8 {
