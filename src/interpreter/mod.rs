@@ -139,7 +139,7 @@ impl Interpreter {
     }
 
     fn execute_fn_stmt(&mut self, stmt: &stmt::Function) -> Result<()> {
-        let function = LoxFunction::new(Stmt::Function(stmt.clone())).map_err(|e| LoxError::Runtime {
+        let function = LoxFunction::new(Stmt::Function(stmt.clone()), *self.environment.clone()).map_err(|e| LoxError::Runtime {
             found: e.found,
             expected: e.expected,
             token: stmt.name.clone(),

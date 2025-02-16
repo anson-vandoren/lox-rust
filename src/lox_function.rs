@@ -8,12 +8,16 @@ use crate::{
 
 pub struct LoxFunction {
     declaration: Function,
+    closure: Environment,
 }
 
 impl LoxFunction {
-    pub fn new(declaration: Stmt) -> Result<Self, ObjectRuntimeError> {
+    pub fn new(declaration: Stmt, closure: Environment) -> Result<Self, ObjectRuntimeError> {
         if let Stmt::Function(decl) = declaration {
-            Ok(Self { declaration: decl })
+            Ok(Self {
+                declaration: decl,
+                closure,
+            })
         } else {
             Err(ObjectRuntimeError {
                 found: format!("{:?}", declaration),
@@ -25,7 +29,8 @@ impl LoxFunction {
 
 impl LoxCallable for LoxFunction {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
-        let mut environment = Environment::with_enclosing(Box::new(interpreter.globals.clone()));
+        // TODO: can we reference the closure instead?
+        let mut environment = Environment::with_enclosing(Box::new(self.closure.clone()));
         arguments.into_iter().enumerate().for_each(|(i, arg)| {
             environment.define(self.declaration.params[i].lexeme.clone(), arg);
         });
