@@ -31,13 +31,13 @@ impl fmt::Debug for Object {
             Object::Null => fmt::Formatter::write_str(f, "Null"),
             Object::Number(n) => write!(f, "{}", &n),
             Object::Boolean(b) => write!(f, "{}", &b),
-            Object::Callable(c) => write!(f, "callable <{}>", &c.name()),
+            Object::Callable(c) => write!(f, "{c}"),
         }
     }
 }
 
 impl LoxCallable for Object {
-    fn call(&self, interpreter: Interpreter, arguments: Vec<Object>) -> Result<Object> {
+    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object> {
         match self {
             Self::Callable(c) => c.call(interpreter, arguments),
             _ => panic!("{:?} is not a LoxCallable", &self),
@@ -51,7 +51,7 @@ impl LoxCallable for Object {
         }
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         match self {
             Self::Callable(c) => c.name(),
             _ => panic!("{:?} is not a LoxCallable", &self),

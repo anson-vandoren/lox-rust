@@ -1,6 +1,6 @@
 use crate::{expr::Expr, token::Token};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Expression {
     pub expression: Expr,
 }
@@ -11,7 +11,7 @@ impl Expression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Print {
     pub expression: Expr,
 }
@@ -22,7 +22,7 @@ impl Print {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Var {
     pub name: Token,
     pub initializer: Option<Expr>,
@@ -34,7 +34,7 @@ impl Var {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Block {
     pub statements: Vec<Stmt>,
 }
@@ -45,14 +45,14 @@ impl Block {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct If {
     pub condition: Expr,
     pub then_branch: Box<Stmt>,
     pub else_branch: Option<Box<Stmt>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct While {
     pub condition: Expr,
     pub body: Box<Stmt>,
@@ -78,11 +78,11 @@ impl If {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Function {
-    name: Token,
-    params: Vec<Token>,
-    body: Vec<Stmt>,
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
 }
 
 impl Function {
@@ -91,6 +91,19 @@ impl Function {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Return {
+    pub keyword: Token,
+    pub value: Option<Expr>,
+}
+
+impl Return {
+    pub fn stmt(keyword: Token, value: Option<Expr>) -> Stmt {
+        Stmt::Return(Self { keyword, value })
+    }
+}
+
+#[derive(Clone)]
 pub enum Stmt {
     Block(Block),
     Expression(Expression),
@@ -99,6 +112,7 @@ pub enum Stmt {
     If(If),
     While(While),
     Function(Function),
+    Return(Return),
 }
 
 impl std::fmt::Debug for Stmt {
@@ -111,6 +125,7 @@ impl std::fmt::Debug for Stmt {
             Self::Print(stmt) => write!(f, "{:?}", stmt),
             Self::Var(stmt) => write!(f, "{:?}", stmt),
             Self::While(stmt) => write!(f, "{:?}", stmt),
+            Self::Return(stmt) => write!(f, "{:?}", stmt),
         }
     }
 }

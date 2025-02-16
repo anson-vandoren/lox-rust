@@ -15,6 +15,7 @@ use std::{env, path::Path};
 
 use ast_printer::AstPrinter;
 use interpreter::Interpreter;
+use object::Object;
 use parser::Parser;
 use scanner::Scanner;
 use snafu::prelude::*;
@@ -134,6 +135,8 @@ pub enum LoxError {
     Runtime { found: String, expected: String, token: Token },
     #[snafu(display("Internal error: {message}"))]
     Internal { message: String },
+    #[snafu()]
+    Return { value: Object },
 }
 
 type Result<T> = std::result::Result<T, LoxError>;

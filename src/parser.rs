@@ -1,7 +1,7 @@
+use super::{LoxError, Result};
 use crate::{
-    LoxError, Result,
     expr::{Assign, Binary, Call, Expr, Grouping, Literal, Logical, Unary, Variable},
-    stmt::{Block, Expression, If, Print, Stmt, Var, While},
+    stmt::{Block, Expression, Function, If, Print, Return, Stmt, Var, While},
     token::Token,
     token_type::TokenType,
 };
@@ -29,18 +29,24 @@ impl Parser {
                 }
             }
         }
-        if had_error { Err(LoxError::Fatal) } else { Ok(statements) }
+        if had_error {
+            Err(LoxError::Fatal)
+        } else {
+            Ok(statements)
+        }
     }
 }
 
 // Declarations
 impl Parser {
     fn declaration(&mut self) -> Result<Stmt> {
-        if self.match_advance(&[TokenType::Var]) {
-            self.var_declaration()
-        } else {
-            self.statement()
+        if self.match_advance(&[TokenType::Fun]) {
+            return self.function_stmt("function");
         }
+        if self.match_advance(&[TokenType::Var]) {
+            return self.var_declaration();
+        }
+        self.statement()
     }
 
     fn var_declaration(&mut self) -> Result<Stmt> {
@@ -66,7 +72,7 @@ impl Parser {
             return self.while_statement();
         }
         if self.match_advance(&[TokenType::LeftBrace]) {
-            return Ok(Block::stmt(self.block()?));
+            return Ok(Block::stmt(self.block_stmt()?));
         }
         if self.match_advance(&[TokenType::If]) {
             return self.if_statement();
@@ -74,7 +80,10 @@ impl Parser {
         if self.match_advance(&[TokenType::For]) {
             return self.for_statement();
         }
-        self.expression_statement()
+        if self.match_advance(&[TokenType::Return]) {
+            return self.return_stmt();
+        }
+        self.expression_stmt()
     }
 
     fn print_statement(&mut self) -> Result<Stmt> {
@@ -109,10 +118,9 @@ impl Parser {
 
     /// De-sugar a for statement into a while statement
     fn for_statement(&mut self) -> Result<Stmt> {
-        /* for (var i = 0; i < 10; i = i + 1) {
-         *    print i;
-         *  }
-         */
+        // for (var i = 0; i < 10; i = i + 1) {
+        // print i;
+        // }
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
         // `var i = 0;`, could also be empty, or just an expression which
         // we'd treat as a statement to keep things tidy
@@ -125,7 +133,7 @@ impl Parser {
                 self.advance();
                 Some(self.var_declaration()?)
             }
-            _ => Some(self.expression_statement()?),
+            _ => Some(self.expression_stmt()?),
         };
 
         // `i < 10;`, if not present use `true` instead
@@ -147,29 +155,26 @@ impl Parser {
 
         // Now, build out the while statement, working backwards
         if let Some(incr) = increment {
-            /* {
-             *   { print i; }
-             *   i = i + 1;
-             * }
-             */
+            // {
+            //   { print i; }
+            //   i = i + 1;
+            // }
             body = Block::stmt(vec![body, Expression::stmt(incr)]);
         }
-        /* while (i < 10) {
-         *   { print i; }
-         *   i = i + 1;
-         * }
-         */
+        // while (i < 10) {
+        //   { print i; }
+        //   i = i + 1;
+        // }
         body = While::stmt(condition, body);
 
-        /* {
-         *   // scope `var` to just this block
-         *   var i = 0;
-         *   while (i < 10) {
-         *     { print i; }
-         *     i = i + 1;
-         *   }
-         * }
-         */
+        // {
+        //   // scope `var` to just this block
+        //   var i = 0;
+        //   while (i < 10) {
+        //     { print i; }
+        //     i = i + 1;
+        //   }
+        // }
         if let Some(init) = initializer {
             body = Block::stmt(vec![init, body]);
         }
@@ -178,13 +183,13 @@ impl Parser {
         Ok(body)
     }
 
-    fn expression_statement(&mut self) -> Result<Stmt> {
+    fn expression_stmt(&mut self) -> Result<Stmt> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after expression")?;
         Ok(Expression::stmt(expr))
     }
 
-    fn block(&mut self) -> Result<Vec<Stmt>> {
+    fn block_stmt(&mut self) -> Result<Vec<Stmt>> {
         let mut statements: Vec<Stmt> = Vec::new();
         while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
             statements.push(self.declaration()?);
@@ -193,6 +198,40 @@ impl Parser {
         self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
 
         Ok(statements)
+    }
+
+    fn function_stmt(&mut self, kind: &str) -> Result<Stmt> {
+        let name = self.consume(TokenType::Identifier, format!("Expect {kind} name.").as_str())?;
+        self.consume(TokenType::LeftParen, format!("Expect '(' after {kind} name.").as_str())?;
+        let mut parameters = Vec::new();
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                if parameters.len() >= 255 {
+                    error(self.peek(), "Can't have more than 255 parameters.");
+                }
+                parameters.push(self.consume(TokenType::Identifier, "Expext parameter name")?);
+                if !self.match_advance(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+        self.consume(TokenType::LeftBrace, format!("Expect '{{' before {kind} body.").as_str())?;
+        let body = self.block_stmt()?;
+        Ok(Function::stmt(name, parameters, body))
+    }
+
+    fn return_stmt(&mut self) -> Result<Stmt> {
+        let keyword = self.previous();
+        let value = if !self.check(&TokenType::Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
+
+        Ok(Return::stmt(keyword, value))
     }
 }
 

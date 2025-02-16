@@ -4,7 +4,7 @@ use crate::{object::Object, token::Token, LoxError, Result};
 
 #[derive(Clone)]
 pub struct Environment {
-    values: HashMap<String, Object>,
+    pub values: HashMap<String, Object>,
     pub enclosing: Option<Box<Environment>>,
 }
 

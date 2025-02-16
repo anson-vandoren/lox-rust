@@ -1,57 +1,56 @@
-use std::rc::Rc;
-
 use macros::ExpressionType;
 
 use crate::{object::Object, token::Token};
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Logical {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Literal {
     pub value: Object,
 }
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Variable {
     pub name: Token,
 }
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
 }
 
-#[derive(Debug, ExpressionType)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Call {
     pub callee: Box<Expr>,
     pub paren: Token,
     pub arguments: Vec<Expr>,
 }
 
+#[derive(Clone)]
 pub enum Expr {
     Binary(Binary),
     Logical(Logical),

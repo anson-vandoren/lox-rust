@@ -3,8 +3,8 @@ use crate::{
     object::{Object, ObjectRuntimeError},
 };
 
-pub trait LoxCallable {
-    fn call(&self, interpreter: Interpreter, arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError>;
+pub trait LoxCallable: std::fmt::Display {
+    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError>;
     fn arity(&self) -> u8;
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 }

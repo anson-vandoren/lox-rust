@@ -1,4 +1,4 @@
-mod environment;
+pub mod environment;
 
 use std::rc::Rc;
 
@@ -8,6 +8,8 @@ use tracing::instrument;
 use super::{LoxError, Result};
 use crate::{
     expr::{self, Expr},
+    lox_callable::LoxCallable as _,
+    lox_function::LoxFunction,
     native::clock::LoxClock,
     object::Object,
     stmt::{self, Stmt},
@@ -16,7 +18,7 @@ use crate::{
 
 pub struct Interpreter {
     environment: Box<Environment>,
-    globals: Environment,
+    pub globals: Environment,
 }
 
 impl Default for Interpreter {
@@ -50,12 +52,13 @@ impl Interpreter {
     fn execute(&mut self, stmt: &Stmt) -> Result<()> {
         match stmt {
             Stmt::Print(stmt) => self.execute_print_stmt(stmt),
-            Stmt::Block(stmt) => self.execute_block(&stmt.statements),
+            Stmt::Block(stmt) => self.execute_block(&stmt.statements, Environment::new()),
             Stmt::Expression(stmt) => self.evaluate(&stmt.expression).map(|_| ()),
             Stmt::Var(stmt) => self.execute_var_stmt(stmt),
             Stmt::If(stmt) => self.execute_if_stmt(stmt),
             Stmt::While(stmt) => self.execute_while_stmt(stmt),
-            Stmt::Function(function) => todo!(),
+            Stmt::Function(stmt) => self.execute_fn_stmt(stmt),
+            Stmt::Return(stmt) => self.execute_return_stmt(stmt),
         }
     }
 
@@ -72,9 +75,9 @@ impl Interpreter {
         }
     }
 
-    fn execute_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
+    pub fn execute_block(&mut self, statements: &Vec<Stmt>, environment: Environment) -> Result<()> {
         // TODO: consider passing environment to the visit methods instead
-        self.enter_scope();
+        self.enter_scope(environment);
         for statement in statements {
             self.execute(statement).inspect_err(|_| self.exit_scope().unwrap())?
         }
@@ -82,9 +85,9 @@ impl Interpreter {
         Ok(())
     }
 
-    fn enter_scope(&mut self) {
-        let current_env = std::mem::replace(&mut self.environment, Box::new(Environment::new()));
-        self.environment = Box::new(Environment::with_enclosing(current_env));
+    fn enter_scope(&mut self, nested_env: Environment) {
+        let current_env = std::mem::replace(&mut self.environment, Box::new(nested_env));
+        self.environment.enclosing = Some(current_env);
     }
 
     fn exit_scope(&mut self) -> Result<()> {
@@ -133,6 +136,26 @@ impl Interpreter {
         }
 
         Ok(())
+    }
+
+    fn execute_fn_stmt(&mut self, stmt: &stmt::Function) -> Result<()> {
+        let function = LoxFunction::new(Stmt::Function(stmt.clone())).map_err(|e| LoxError::Runtime {
+            found: e.found,
+            expected: e.expected,
+            token: stmt.name.clone(),
+        })?;
+        self.environment
+            .define(stmt.name.lexeme.clone(), Object::Callable(Rc::new(function)));
+        Ok(())
+    }
+
+    fn execute_return_stmt(&mut self, stmt: &stmt::Return) -> Result<()> {
+        let value = if let Some(ref val) = stmt.value {
+            self.evaluate(val)?
+        } else {
+            Object::Null
+        };
+        Err(LoxError::Return { value })
     }
 
     fn eval_binary(&mut self, expr: &expr::Binary) -> Result<Object> {
@@ -207,20 +230,19 @@ impl Interpreter {
     }
 
     fn eval_call(&mut self, expr: &expr::Call) -> Result<Object> {
-        // let callee = self.evaluate(&expr.callee)?;
-        // let arguments = Vec::new();
-        // for argument in expr.arguments {
-        //    arguments.push(self.evaluate(&argument)?);
-        //}
-        // let function = callee;
-        // if arguments.len() != function.arity() {
-        //    return Err(LoxError::Runtime {
-        //        token: expr.paren,
-        //        expected: format!("{} arguments", function.arity()),
-        //        found: format!("{} arguments", arguments.len()),
-        //    });
-        //}
-        // function.call(self, arguments)
-        todo!()
+        let callee = self.evaluate(&expr.callee)?;
+        let mut arguments = Vec::new();
+        for argument in expr.arguments.iter() {
+            arguments.push(self.evaluate(argument)?);
+        }
+        let function = callee;
+        if arguments.len() as u8 != function.arity() {
+            return Err(LoxError::Runtime {
+                token: expr.paren.clone(),
+                expected: format!("{} arguments", function.arity()),
+                found: format!("{} arguments", arguments.len()),
+            });
+        }
+        function.call(self, arguments).map_err(|e| e.into_lox(&expr.paren))
     }
 }
