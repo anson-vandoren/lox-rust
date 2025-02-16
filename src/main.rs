@@ -20,7 +20,7 @@ use parser::Parser;
 use scanner::Scanner;
 use snafu::prelude::*;
 use token::Token;
-use tracing::instrument;
+use tracing::{instrument, trace};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
@@ -43,7 +43,7 @@ fn init_tracing() {
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format.into()))
-        .with(tracing_subscriber::fmt::layer().with_line_number(true))
+        .with(tracing_subscriber::fmt::layer().with_line_number(true).compact())
         .init();
 }
 
@@ -108,8 +108,9 @@ impl Lox {
         let stmts = parser.parse();
         match stmts {
             Ok(s) => {
-                let mut resolver = Resolver::new(&self.interpreter);
-                resolver.resolve_all(s);
+                let mut resolver = Resolver::new(&mut self.interpreter);
+                trace!("Resolving vars");
+                resolver.resolve_all(&s);
                 self.interpreter.interpret(s).inspect_err(|_| {
                     self.had_runtime_error = true;
                 })?;

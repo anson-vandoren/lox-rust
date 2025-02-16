@@ -2,11 +2,17 @@ use macros::ExpressionType;
 
 use crate::{object::Object, token::Token};
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, Eq, ExpressionType, Hash, PartialEq)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
+}
+
+impl std::fmt::Debug for Binary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?} {:?} {:?}", self.left, self.operator, self.right)
+    }
 }
 
 #[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
@@ -21,9 +27,15 @@ pub struct Grouping {
     pub expression: Box<Expr>,
 }
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, Eq, ExpressionType, Hash, PartialEq)]
 pub struct Literal {
     pub value: Object,
+}
+
+impl std::fmt::Debug for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Literal({:?})", self.value)
+    }
 }
 
 #[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
@@ -37,10 +49,22 @@ pub struct Variable {
     pub name: Token,
 }
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+//impl std::fmt::Debug for Variable {
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        write!(f, "Variable({:?})", self.name)
+//    }
+//}
+
+#[derive(Clone, Eq, ExpressionType, Hash, PartialEq)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
+}
+
+impl std::fmt::Debug for Assign {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Assign({} = {:?};)", self.name.lexeme, self.value)
+    }
 }
 
 #[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]

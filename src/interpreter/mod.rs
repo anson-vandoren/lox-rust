@@ -5,7 +5,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use environment::Environment;
 use ordered_float::OrderedFloat;
-use tracing::instrument;
+use tracing::{instrument, trace};
 
 use super::{LoxError, Result};
 use crate::{
@@ -55,6 +55,7 @@ impl Interpreter {
     }
 
     fn execute(&mut self, stmt: &Stmt) -> Result<()> {
+        trace!(?stmt, "Excuting statement");
         match stmt {
             Stmt::Print(stmt) => self.execute_print_stmt(stmt),
             Stmt::Block(stmt) => self.execute_block(&stmt.statements, Environment::new()),
@@ -68,6 +69,7 @@ impl Interpreter {
     }
 
     fn evaluate(&mut self, expr: &Expr) -> Result<Object> {
+        trace!(?expr, "Evaluating expression");
         match expr {
             Expr::Binary(expr) => self.eval_binary(expr),
             Expr::Logical(expr) => self.eval_logical(expr),
@@ -91,11 +93,14 @@ impl Interpreter {
     }
 
     fn enter_scope(&mut self, nested_env: Environment) {
+        trace!(values=?nested_env.values, "entering scope");
         let current_env = std::mem::replace(&mut self.environment, Box::new(nested_env));
         self.environment.enclosing = Some(current_env);
+        trace!(top=?self.environment.values, enclosing=?self.environment.enclosing.as_ref().unwrap().values, "scope is entered");
     }
 
     fn exit_scope(&mut self) -> Result<()> {
+        trace!("exiting scope");
         if let Some(enclosing) = self.environment.enclosing.take() {
             self.environment = enclosing;
             Ok(())
@@ -108,7 +113,11 @@ impl Interpreter {
 
     // TODO: shouldn't need to be mut
     fn execute_print_stmt(&mut self, stmt: &stmt::Print) -> Result<()> {
-        println!("{}", self.evaluate(&stmt.expression)?);
+        let val = self.evaluate(&stmt.expression)?;
+        if val < Object::Number(OrderedFloat(-1_f64)) {
+            panic!()
+        }
+        println!("{}", val);
         Ok(())
     }
 
@@ -118,6 +127,7 @@ impl Interpreter {
             None => Object::Null,
         };
 
+        trace!(name = stmt.name.lexeme, ?value, "Defining in env");
         self.environment.define(stmt.name.lexeme.clone(), value);
         Ok(())
     }
@@ -234,9 +244,11 @@ impl Interpreter {
             let value = self.evaluate(&assign.value)?;
             let distance = self.locals.get(expr);
             if let Some(distance) = distance {
-                self.environment.assign_at(distance, name, value.clone());
+                trace!(distance, ?value, ?name, "Assigning to local");
+                self.environment.assign_at(distance, name, value.clone())?;
             } else {
-                self.globals.assign(name, value.clone());
+                trace!(?value, ?name, "Assigning to global");
+                self.globals.assign(name, value.clone())?;
             }
             Ok(value)
         } else {
@@ -264,15 +276,24 @@ impl Interpreter {
     }
 
     fn resolve(&mut self, expr: &Expr, i: u8) {
+        println!("Locals before insert {:?}", self.locals);
+        if self.locals.contains_key(expr) {
+            panic!("Tried to insert {expr:?} at depth {i} over {:?}", self.locals.get(expr).unwrap());
+        }
         self.locals.insert(expr.clone(), i);
+        trace!(depth = i, ?expr, locals=?self.locals, "Inserted local");
     }
 
-    fn lookup_variable(&self, expr: &Expr) -> Result<Object> {
+    fn lookup_variable(&mut self, expr: &Expr) -> Result<Object> {
+        trace!(locals=?self.locals, "looking up {expr:?}");
         match expr {
-            Expr::Variable(var) | Expr::Assign(var) => {
+            Expr::Variable(var) => {
                 if let Some(distance) = self.locals.get(expr) {
-                    self.environment.get_at(distance, &var.name.lexeme)
+                    let val = self.environment.get_at(distance, &var.name.lexeme);
+                    trace!("var: found value {val:?} at distance {distance}\n{:?}", self.locals);
+                    val
                 } else {
+                    trace!(globals=?self.globals.values, "var: no distance");
                     self.globals.get(&var.name)
                 }
             }

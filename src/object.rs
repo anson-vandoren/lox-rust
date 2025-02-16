@@ -126,26 +126,6 @@ impl Object {
             }),
         }
     }
-
-    fn as_string(&self) -> Result<&str> {
-        match self {
-            Object::String(s) => Ok(s),
-            _ => Err(ObjectRuntimeError {
-                found: self.to_string(),
-                expected: "string".to_string(),
-            }),
-        }
-    }
-
-    fn as_bool(&self) -> Result<&bool> {
-        match self {
-            Object::Boolean(b) => Ok(b),
-            _ => Err(ObjectRuntimeError {
-                found: self.to_string(),
-                expected: "boolean".to_string(),
-            }),
-        }
-    }
 }
 
 impl ops::Add for Object {

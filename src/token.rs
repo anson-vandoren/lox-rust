@@ -1,6 +1,6 @@
 use crate::{object::Object, token_type::TokenType};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Token {
     pub typ: TokenType,
     pub lexeme: String,
@@ -8,12 +8,33 @@ pub struct Token {
     pub line: usize,
 }
 
+#[automatically_derived]
+impl ::core::fmt::Debug for Token {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.typ {
+            TokenType::Greater => write!(f, ">"),
+            TokenType::Less => write!(f, "<"),
+            TokenType::Minus => write!(f, "-"),
+            TokenType::Plus => write!(f, "+"),
+            TokenType::EqualEqual => write!(f, "=="),
+            TokenType::Identifier => write!(f, "{}", self.lexeme),
+            _ => f
+                .debug_struct("Token")
+                .field("typ", &self.typ)
+                .field("lexeme", &self.lexeme)
+                .field("literal", &self.literal)
+                .field("line", &&self.line)
+                .finish(),
+        }
+    }
+}
+
 impl std::hash::Hash for Token {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.typ.hash(state);
         self.lexeme.hash(state);
-        // at least the same variant
-        core::mem::discriminant::<Object>(&self.literal).hash(state);
+        self.literal.hash(state);
         self.line.hash(state);
     }
 }

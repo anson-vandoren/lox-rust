@@ -1,3 +1,5 @@
+use tracing::trace;
+
 use super::{LoxError, Result};
 use crate::{
     expr::{Assign, Binary, Call, Expr, Grouping, Literal, Logical, Unary, Variable},
@@ -180,6 +182,7 @@ impl Parser {
         }
 
         // boom!
+        trace!(?body, "Created For loop");
         Ok(body)
     }
 

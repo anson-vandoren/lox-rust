@@ -1,8 +1,14 @@
 use crate::{expr::Expr, token::Token};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Expression {
     pub expression: Expr,
+}
+
+impl std::fmt::Debug for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.expression)
+    }
 }
 
 impl Expression {
@@ -11,9 +17,15 @@ impl Expression {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Print {
     pub expression: Expr,
+}
+
+impl std::fmt::Debug for Print {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "print {:?};", &self.expression)
+    }
 }
 
 impl Print {
@@ -22,10 +34,21 @@ impl Print {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Var {
     pub name: Token,
     pub initializer: Option<Expr>,
+}
+
+impl std::fmt::Debug for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let val = if let Some(init) = &self.initializer {
+            format!("{:?}", init)
+        } else {
+            "nil".to_string()
+        };
+        write!(f, "VarStmt({} = {})", self.name.lexeme, val)
+    }
 }
 
 impl Var {
@@ -34,9 +57,15 @@ impl Var {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Block {
     pub statements: Vec<Stmt>,
+}
+
+impl std::fmt::Debug for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Block{:?}", self.statements)
+    }
 }
 
 impl Block {
@@ -52,10 +81,16 @@ pub struct If {
     pub else_branch: Option<Box<Stmt>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct While {
     pub condition: Expr,
     pub body: Box<Stmt>,
+}
+
+impl std::fmt::Debug for While {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "While ({:?}) {{ {:?} }}", &self.condition, &self.body)
+    }
 }
 
 impl While {
@@ -91,10 +126,21 @@ impl Function {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Return {
     pub keyword: Token,
     pub value: Option<Expr>,
+}
+
+impl std::fmt::Debug for Return {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let val = if let Some(ret) = &self.value {
+            format!("{:?}", ret)
+        } else {
+            "nil".to_string()
+        };
+        write!(f, "return {:?};", val)
+    }
 }
 
 impl Return {
