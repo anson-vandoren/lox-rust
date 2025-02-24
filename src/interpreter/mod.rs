@@ -4,6 +4,7 @@ pub mod resolver;
 use std::{collections::HashMap, rc::Rc};
 
 use environment::Environment;
+use snafu::whatever;
 use tracing::{instrument, trace};
 
 use super::{LoxError, Result};
@@ -12,7 +13,7 @@ use crate::{
     lox_callable::LoxCallable as _,
     lox_class::LoxClass,
     lox_function::LoxFunction,
-    native::clock::LoxClock,
+    native::{assert_eq::LoxAssertEq, clock::LoxClock},
     object::{Literal, Object},
     stmt::{self, Stmt},
     token::Token,
@@ -40,6 +41,7 @@ impl Interpreter {
     pub fn new() -> Interpreter {
         let mut globals = Environment::new();
         globals.define("clock".to_string(), Object::Callable(Rc::new(LoxClock {})));
+        globals.define("assert_eq".to_string(), Object::Callable(Rc::new(LoxAssertEq {})));
         Self {
             environment: Box::new(globals.clone()),
             globals, // BUG: globals needs to be a ref in environment
@@ -82,6 +84,7 @@ impl Interpreter {
             Expr::Assign(assign) => self.eval_assign(assign),
             Expr::Call(expr) => self.eval_call(expr),
             Expr::Get(expr) => self.eval_get(expr),
+            Expr::Set(expr) => self.eval_set(expr),
         }
     }
 
@@ -166,11 +169,7 @@ impl Interpreter {
     }
 
     fn execute_fn_stmt(&mut self, stmt: &stmt::Function) -> Result<()> {
-        let function = LoxFunction::new(Stmt::Function(stmt.clone()), *self.environment.clone()).map_err(|e| LoxError::Runtime {
-            found: e.found,
-            expected: e.expected,
-            token: stmt.name.clone(),
-        })?;
+        let function = LoxFunction::new(stmt.clone(), *self.environment.clone());
         self.environment
             .define(stmt.name.lexeme.clone(), Object::Callable(Rc::new(function)));
         Ok(())
@@ -187,7 +186,14 @@ impl Interpreter {
 
     fn execute_class_stmt(&mut self, stmt: &stmt::Class) -> Result<()> {
         self.environment.define(stmt.name.lexeme.clone(), Object::Literal(Literal::Null));
-        let class = LoxClass::new(&stmt.name.lexeme);
+
+        let mut methods = HashMap::new();
+        for method in stmt.methods.iter() {
+            let function = LoxFunction::new(method.clone(), *self.environment.clone());
+            methods.insert(method.name.lexeme.clone(), function);
+        }
+
+        let class = LoxClass::new(&stmt.name.lexeme, methods);
         self.environment.assign(&stmt.name, Object::Callable(Rc::new(class)))?;
         Ok(())
     }
@@ -263,7 +269,7 @@ impl Interpreter {
         let distance = self.locals.get(&assign.name);
         if let Some(distance) = distance {
             trace!(distance, ?value, ?name, "Assigning to local");
-            self.environment.assign_at(distance, name, value.clone())?;
+            self.environment.assign_at(distance, &name.lexeme, value.clone())?;
         } else {
             trace!(?value, ?name, "Assigning to global");
             self.environment.assign(name, value.clone())?;
@@ -308,7 +314,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_get(&mut self, expr: &expr::Get) -> std::result::Result<Object, LoxError> {
+    fn eval_get(&mut self, expr: &expr::Get) -> Result<Object> {
         let object = self.evaluate(&expr.object)?;
         if let Object::Instance(instance) = object {
             return instance.get(&expr.name);
@@ -317,5 +323,30 @@ impl Interpreter {
         Err(LoxError::Internal {
             message: "Only instances have properties.".to_string(),
         })
+    }
+
+    fn eval_set(&mut self, expr: &expr::Set) -> Result<Object> {
+        let object = self.evaluate(&expr.object)?;
+
+        if let Object::Instance(mut object) = object {
+            let value = self.evaluate(&expr.value)?;
+            object.set(expr.name.clone(), value.clone());
+            trace!(object = ?object, ?expr, ?value, env = ?self.environment.values, "Object after setting");
+
+            // Update env with the mutated object
+            let Expr::Variable(ref var_expr) = *expr.object else {
+                whatever!("wrong kind of expr")
+            };
+            trace!(name = ?var_expr.name, "Updating mutated obj");
+            self.environment.assign(&var_expr.name, Object::Instance(object))?;
+
+            Ok(value)
+        } else {
+            Err(LoxError::Runtime {
+                found: format!("{:?}", object),
+                expected: "A LoxInstance".into(),
+                token: expr.name.clone(),
+            })
+        }
     }
 }

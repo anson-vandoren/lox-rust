@@ -198,7 +198,7 @@ impl std::ops::Add for Literal {
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number((first + second).into())),
+            (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number(first + second)),
             (Literal::String(first), Literal::String(second)) => Ok(format!("{}{}", first, second).into()),
             _ => Err(ObjectRuntimeError {
                 found: "mismatched operands".into(),
@@ -213,7 +213,7 @@ impl std::ops::Sub for Literal {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number((first - second).into())),
+            (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number(first - second)),
             _ => Err(ObjectRuntimeError {
                 found: "non-number operand(s)".into(),
                 expected: "number + number".into(),
@@ -315,6 +315,12 @@ impl fmt::Display for Literal {
 impl From<String> for Literal {
     fn from(v: String) -> Self {
         Literal::String(v)
+    }
+}
+
+impl From<&str> for Literal {
+    fn from(v: &str) -> Self {
+        Literal::String(v.to_string())
     }
 }
 

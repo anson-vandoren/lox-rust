@@ -29,11 +29,16 @@ impl Scanner {
 
         while self.current < eof {
             self.start = self.current;
-            if self.scan_token().map_err(|error| error!(?error, "Error while scanning")).is_err() {
+            if self
+                .scan_token()
+                .map_err(|error| error!(?error, "Error while scanning"))
+                .is_err()
+            {
                 had_error = true;
             }
         }
-        self.tokens.push(Token::new(TokenType::Eof, "", Literal::Null, self.line));
+        self.tokens
+            .push(Token::new(TokenType::Eof, "", Literal::Null, self.line));
 
         match had_error {
             false => Ok(self.tokens),
@@ -45,7 +50,11 @@ impl Scanner {
     fn scan_token(&mut self) -> Result<()> {
         let c = self.advance();
         let mut if_equals_else = |is_equal: TokenType, not_equal: TokenType| {
-            let token_type = if self.advance_if_is('=') { is_equal } else { not_equal };
+            let token_type = if self.advance_if_is('=') {
+                is_equal
+            } else {
+                not_equal
+            };
             self.add_token(token_type);
         };
         match c {
@@ -121,7 +130,8 @@ impl Scanner {
 
     fn add_token_with_literal(&mut self, token_type: TokenType, literal: crate::object::Literal) {
         let text = &self.source[self.start..self.current];
-        self.tokens.push(Token::new(token_type, text, literal, self.line))
+        self.tokens
+            .push(Token::new(token_type, text, literal, self.line))
     }
 
     fn advance_if_is(&mut self, expected: char) -> bool {
@@ -170,7 +180,10 @@ impl Scanner {
         self.advance();
 
         let val = &self.source[self.start + 1..self.current - 1];
-        self.add_token_with_literal(TokenType::String, crate::object::Literal::String(val.to_string()));
+        self.add_token_with_literal(
+            TokenType::String,
+            crate::object::Literal::String(val.to_string()),
+        );
         Ok(())
     }
 
@@ -189,8 +202,13 @@ impl Scanner {
             self.advance();
         }
 
-        let as_float: f64 = self.source[self.start..self.current].parse::<f64>().expect("Better be a number");
-        self.add_token_with_literal(TokenType::Number, crate::object::Literal::Number(OrderedFloat(as_float)))
+        let as_float: f64 = self.source[self.start..self.current]
+            .parse::<f64>()
+            .expect("Better be a number");
+        self.add_token_with_literal(
+            TokenType::Number,
+            crate::object::Literal::Number(OrderedFloat(as_float)),
+        )
     }
 
     fn identifier(&mut self) {

@@ -90,6 +90,13 @@ pub struct Get {
     pub name: Token,
 }
 
+#[derive(Clone, Debug, ExpressionType)]
+pub struct Set {
+    pub object: Box<Expr>,
+    pub name: Token,
+    pub value: Box<Expr>,
+}
+
 #[derive(Clone)]
 pub enum Expr {
     Binary(Binary),
@@ -101,6 +108,7 @@ pub enum Expr {
     Assign(Assign),
     Call(Call),
     Get(Get),
+    Set(Set),
 }
 
 impl std::fmt::Debug for Expr {
@@ -115,6 +123,7 @@ impl std::fmt::Debug for Expr {
             Self::Assign(expr) => write!(f, "{:?}", expr),
             Self::Call(expr) => write!(f, "{:?}", expr),
             Self::Get(expr) => write!(f, "{:?}", expr),
+            Self::Set(expr) => write!(f, "{:?}", expr),
         }
     }
 }

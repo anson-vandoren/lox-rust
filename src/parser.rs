@@ -2,7 +2,7 @@ use tracing::trace;
 
 use super::{LoxError, Result};
 use crate::{
-    expr::{Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Unary, Variable},
+    expr::{Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Set, Unary, Variable},
     stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While},
     token::Token,
     token_type::TokenType,
@@ -62,8 +62,9 @@ impl Parser {
         Ok(Var::stmt(name, initializer))
     }
 
-    fn class_declaration(&mut self) -> std::result::Result<Stmt, LoxError> {
+    fn class_declaration(&mut self) -> Result<Stmt> {
         let name = self.consume(TokenType::Identifier, "Expect class name.")?;
+        trace!(?name, ">> class_declaration()");
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
 
         let mut methods = Vec::new();
@@ -78,6 +79,7 @@ impl Parser {
 
         self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
 
+        trace!(?methods, "<< class_declaration()");
         Ok(Class::stmt(name, methods))
     }
 }
@@ -265,6 +267,7 @@ impl Parser {
     fn assignment(&mut self) -> Result<Expr> {
         let expr = self.or()?;
 
+        trace!(?expr, ">> assignment()");
         if self.match_advance(&[TokenType::Equal]) {
             let equals = self.previous();
             let value = self.assignment()?;
@@ -273,6 +276,12 @@ impl Parser {
                 let name = var.name;
                 trace!(?name, ?value, "Assign expr");
                 return Ok(Assign::expr(name, value));
+            }
+
+            if let Expr::Get(get) = expr {
+                let name = get.name;
+                trace!(?name, ?value, "Get expr");
+                return Ok(Set::expr(*get.object, name, value));
             }
 
             Err(error(&equals, "Invalid assignment target."))

@@ -21,6 +21,7 @@ pub struct Resolver<'a> {
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 impl<'a> Resolver<'a> {
@@ -91,6 +92,10 @@ impl Resolver<'_> {
                 self.resolve_expr(&logic.right)?;
             }
             Expr::Unary(unary) => self.resolve_expr(&unary.right)?,
+            Expr::Set(set) => {
+                self.resolve_expr(&set.value)?;
+                self.resolve_expr(&set.object)?;
+            }
         }
         trace!(?expr, "Exited expression");
         Ok(())
@@ -147,6 +152,11 @@ impl Resolver<'_> {
             Stmt::Class(stmt) => {
                 self.declare(&stmt.name.lexeme)?;
                 self.define(&stmt.name.lexeme)?;
+
+                for method in stmt.methods.iter() {
+                    let declaration = FunctionType::Method;
+                    self.resolve_func(method, declaration)?;
+                }
             }
         }
         trace!(?statement, "Finished resolving statement");
@@ -186,8 +196,9 @@ impl Resolver<'_> {
     }
 
     fn declare(&mut self, name: &str) -> Result<()> {
-        trace!(name, len = self.scopes.len(), "Declaring");
+        trace!(name, len = self.scopes.len(), ">> Declaring");
         if self.scopes.is_empty() {
+            trace!("<< Declaring, no scopes");
             return Ok(());
         }
 
@@ -199,13 +210,14 @@ impl Resolver<'_> {
         } else {
             whatever!("Should have a scope by 'declare'")
         }
-        trace!(name, len = self.scopes.len(), "Done declaring");
+        trace!(name, len = self.scopes.len(), "<< Declaring, into parent");
         Ok(())
     }
 
     fn define(&mut self, name: &str) -> Result<()> {
-        trace!(name, len = self.scopes.len(), "Defining");
+        trace!(name, len = self.scopes.len(), ">> Resolver.define()");
         if self.scopes.is_empty() {
+            trace!("<< Resolver.define(), no scope");
             return Ok(());
         }
 
@@ -214,7 +226,7 @@ impl Resolver<'_> {
         } else {
             whatever!("Didn't have initial scope in define")
         }
-        trace!(name, len = self.scopes.len(), "Done defining");
+        trace!(name, len = self.scopes.len(), "<< Resolver.define(), into parent scope");
         Ok(())
     }
 

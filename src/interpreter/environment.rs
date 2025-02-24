@@ -1,10 +1,10 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 
 use tracing::trace;
 
-use crate::{object::Object, token::Token, LoxError, Result};
+use crate::{LoxError, Result, object::Object, token::Token};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Environment {
     pub values: HashMap<String, Object>,
     pub enclosing: Option<Box<Environment>>,
@@ -27,17 +27,19 @@ impl Environment {
     }
 
     pub fn define(&mut self, name: String, value: Object) {
-        trace!(name, ?value, current=?self.values, "defining");
+        trace!(?name, ?value, current=?self.values, "defining");
         self.values.insert(name, value);
         trace!(current=?self.values, "done defining");
     }
 
     pub fn assign(&mut self, name: &Token, value: Object) -> Result<()> {
-        trace!(?name, ?value, "Assigning to env");
+        trace!(?name, ?value, values = ?self.values, ">> assign()");
         match self.values.entry(name.lexeme.clone()) {
             Entry::Vacant(_) => {
                 if let Some(ref mut outer) = self.enclosing {
-                    outer.assign(name, value)
+                    let res = outer.assign(name, value);
+                    trace!(values = ?self.values, "<< assign(), vacant");
+                    res
                 } else {
                     Err(LoxError::Runtime {
                         expected: format!("Variable '{}' to be defined.", name.lexeme),
@@ -48,18 +50,20 @@ impl Environment {
             }
             Entry::Occupied(mut entry) => {
                 entry.insert(value);
+                trace!(values = ?self.values, "<< assign(), occupied");
                 Ok(())
             }
         }
     }
 
-    pub fn assign_at(&mut self, distance: &u8, name: &Token, value: Object) -> Result<()> {
+    pub fn assign_at(&mut self, distance: &u8, name: &str, value: Object) -> Result<()> {
         trace!(distance, ?name, ?value, "Assigning to env ancestor");
-        self.ancestor(distance).values.insert(name.lexeme.clone(), value);
+        self.ancestor(distance).values.insert(name.to_string(), value);
         Ok(())
     }
 
     pub fn get(&self, name: &Token) -> Result<Object> {
+        trace!(?name, values = ?self.values, ">> Environment.get()");
         match self.values.get(&name.lexeme) {
             Some(val) => Ok(val.clone()),
             None => {

@@ -1,6 +1,6 @@
 use crate::{object::Literal, token_type::TokenType};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct Token {
     pub typ: TokenType,
     pub lexeme: String,
@@ -18,7 +18,7 @@ impl ::core::fmt::Debug for Token {
             TokenType::Minus => write!(f, "-"),
             TokenType::Plus => write!(f, "+"),
             TokenType::EqualEqual => write!(f, "=="),
-            TokenType::Identifier => write!(f, "{}({:?})", self.lexeme, self.literal),
+            //TokenType::Identifier => write!(f, "{}({:?})", self.lexeme, self.literal),
             _ => f
                 .debug_struct("Token")
                 .field("typ", &self.typ)
@@ -29,17 +29,6 @@ impl ::core::fmt::Debug for Token {
         }
     }
 }
-
-impl std::hash::Hash for Token {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.typ.hash(state);
-        self.lexeme.hash(state);
-        self.literal.hash(state);
-        self.line.hash(state);
-    }
-}
-
-impl Eq for Token {}
 
 impl Token {
     pub fn new(typ: TokenType, lexeme: &str, literal: Literal, line: usize) -> Token {

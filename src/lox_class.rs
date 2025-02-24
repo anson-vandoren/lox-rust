@@ -1,26 +1,37 @@
+use std::collections::HashMap;
+
 use crate::{
     interpreter::Interpreter,
     lox_callable::LoxCallable,
+    lox_function::LoxFunction,
     lox_instance::LoxInstance,
     object::{Object, ObjectRuntimeError},
 };
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct LoxClass {
     pub name: String,
+    pub methods: HashMap<String, LoxFunction>,
 }
 
 impl LoxClass {
-    pub fn new<T>(name: T) -> Self
+    pub fn new<T>(name: T, methods: HashMap<String, LoxFunction>) -> Self
     where
         T: Into<String>,
     {
-        Self { name: name.into() }
+        Self {
+            name: name.into(),
+            methods,
+        }
+    }
+
+    pub fn find_method(&self, name: &str) -> Option<LoxFunction> {
+        self.methods.get(name).cloned()
     }
 }
 
 impl LoxCallable for LoxClass {
-    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
+    fn call(&self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
         Ok(Object::Instance(LoxInstance::new(self.clone())))
     }
 

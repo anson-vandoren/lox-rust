@@ -3,27 +3,24 @@ use crate::{
     interpreter::{Interpreter, environment::Environment},
     lox_callable::LoxCallable,
     object::{Literal, Object, ObjectRuntimeError},
-    stmt::{Function, Stmt},
+    stmt::Function,
 };
 
+#[derive(Clone, Debug)]
 pub struct LoxFunction {
     declaration: Function,
     closure: Environment,
 }
 
 impl LoxFunction {
-    pub fn new(declaration: Stmt, closure: Environment) -> Result<Self, ObjectRuntimeError> {
-        if let Stmt::Function(decl) = declaration {
-            Ok(Self {
-                declaration: decl,
-                closure,
-            })
-        } else {
-            Err(ObjectRuntimeError {
-                found: format!("{:?}", declaration),
-                expected: "A Function Statement.".to_string(),
-            })
-        }
+    pub fn new(declaration: Function, closure: Environment) -> Self {
+        Self { declaration, closure }
+    }
+}
+
+impl std::fmt::Display for LoxFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<fn {}>", self.declaration.name.lexeme)
     }
 }
 
@@ -57,17 +54,5 @@ impl LoxCallable for LoxFunction {
 
     fn name(&self) -> &str {
         &self.declaration.name.lexeme
-    }
-}
-
-impl std::fmt::Display for LoxFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<fn {}>", self.declaration.name.lexeme)
-    }
-}
-
-impl PartialEq for LoxFunction {
-    fn eq(&self, other: &Self) -> bool {
-        self.declaration.params.len() == other.declaration.params.len() && self.declaration.name.lexeme == other.declaration.name.lexeme
     }
 }

@@ -15,6 +15,7 @@ impl AstPrinter {
             Expr::Assign(expr) => self.print_assign(expr),
             Expr::Call(expr) => self.print_call(expr),
             Expr::Get(expr) => self.print_get(expr),
+            Expr::Set(set) => todo!(),
         }
     }
 
@@ -72,11 +73,17 @@ mod test {
     #[test]
     fn does_the_thing() {
         let expr = Binary::expr(
-            Unary::expr(Token::new(TokenType::Minus, "-", ().into(), 1), Literal::expr(123_f64.into())),
+            Unary::expr(
+                Token::new(TokenType::Minus, "-", ().into(), 1),
+                Literal::expr(123_f64.into()),
+            ),
             Token::new(TokenType::Star, "*", ().into(), 1),
             Grouping::expr(Literal::expr(45.67.into())),
         );
         let printer = AstPrinter {};
-        assert_eq!(printer.print(&expr), "(* (- 123) (group 45.67))".to_string());
+        assert_eq!(
+            printer.print(&expr),
+            "(* (- 123) (group 45.67))".to_string()
+        );
     }
 }
