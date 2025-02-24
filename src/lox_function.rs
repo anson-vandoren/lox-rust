@@ -1,9 +1,9 @@
 use crate::{
-    interpreter::{environment::Environment, Interpreter},
-    lox_callable::LoxCallable,
-    object::{Object, ObjectRuntimeError},
-    stmt::{Function, Stmt},
     LoxError,
+    interpreter::{Interpreter, environment::Environment},
+    lox_callable::LoxCallable,
+    object::{Literal, Object, ObjectRuntimeError},
+    stmt::{Function, Stmt},
 };
 
 pub struct LoxFunction {
@@ -39,7 +39,7 @@ impl LoxCallable for LoxFunction {
             LoxError::Return { value } => Ok(value),
             other => Err(other),
         }) {
-            Ok(()) => Ok(Object::Null),
+            Ok(()) => Ok(Object::Literal(Literal::Null)),
             Err(Ok(value)) => Ok(value),
             Err(Err(e)) => Err(match e {
                 LoxError::Runtime { found, expected, token: _ } => ObjectRuntimeError { found, expected },

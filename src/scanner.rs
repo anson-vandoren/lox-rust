@@ -1,7 +1,7 @@
 use ordered_float::OrderedFloat;
 use tracing::{error, instrument};
 
-use crate::{object::Object, token::Token, token_type::TokenType, LoxError, Result};
+use crate::{LoxError, Result, object::Literal, token::Token, token_type::TokenType};
 
 pub struct Scanner {
     source: String,
@@ -33,7 +33,7 @@ impl Scanner {
                 had_error = true;
             }
         }
-        self.tokens.push(Token::new(TokenType::Eof, "", Object::Null, self.line));
+        self.tokens.push(Token::new(TokenType::Eof, "", Literal::Null, self.line));
 
         match had_error {
             false => Ok(self.tokens),
@@ -116,10 +116,10 @@ impl Scanner {
     }
 
     fn add_token(&mut self, token_type: TokenType) {
-        self.add_token_with_literal(token_type, Object::Null)
+        self.add_token_with_literal(token_type, crate::object::Literal::Null)
     }
 
-    fn add_token_with_literal(&mut self, token_type: TokenType, literal: Object) {
+    fn add_token_with_literal(&mut self, token_type: TokenType, literal: crate::object::Literal) {
         let text = &self.source[self.start..self.current];
         self.tokens.push(Token::new(token_type, text, literal, self.line))
     }
@@ -170,7 +170,7 @@ impl Scanner {
         self.advance();
 
         let val = &self.source[self.start + 1..self.current - 1];
-        self.add_token_with_literal(TokenType::String, Object::String(val.to_string()));
+        self.add_token_with_literal(TokenType::String, crate::object::Literal::String(val.to_string()));
         Ok(())
     }
 
@@ -190,7 +190,7 @@ impl Scanner {
         }
 
         let as_float: f64 = self.source[self.start..self.current].parse::<f64>().expect("Better be a number");
-        self.add_token_with_literal(TokenType::Number, Object::Number(OrderedFloat(as_float)))
+        self.add_token_with_literal(TokenType::Number, crate::object::Literal::Number(OrderedFloat(as_float)))
     }
 
     fn identifier(&mut self) {

@@ -1,8 +1,11 @@
+use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
+
 use macros::ExpressionType;
+use tracing::trace;
 
-use crate::{object::Object, token::Token};
+use crate::token::Token;
 
-#[derive(Clone, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, ExpressionType)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
@@ -15,21 +18,21 @@ impl std::fmt::Debug for Binary {
     }
 }
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Logical {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
 
-#[derive(Clone, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, ExpressionType)]
 pub struct Literal {
-    pub value: Object,
+    pub value: crate::object::Literal,
 }
 
 impl std::fmt::Debug for Literal {
@@ -38,24 +41,31 @@ impl std::fmt::Debug for Literal {
     }
 }
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+#[derive(Clone, Debug)]
 pub struct Variable {
     pub name: Token,
 }
 
-//impl std::fmt::Debug for Variable {
-//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//        write!(f, "Variable({:?})", self.name)
-//    }
-//}
+impl Variable {
+    pub fn expr(mut name: Token) -> Expr {
+        // Token is used as the key for locals, needs to be unique to _this_ instance of the
+        // variable being referenced to make sure scopes are correct
+        let nonce = COUNTER.fetch_add(1, Relaxed);
+        name.literal = nonce.into();
+        trace!(?name, nonce, "Creating variable");
+        Expr::Variable(Self { name })
+    }
+}
 
-#[derive(Clone, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, ExpressionType)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
@@ -67,14 +77,20 @@ impl std::fmt::Debug for Assign {
     }
 }
 
-#[derive(Clone, Debug, Eq, ExpressionType, Hash, PartialEq)]
+#[derive(Clone, Debug, ExpressionType)]
 pub struct Call {
     pub callee: Box<Expr>,
     pub paren: Token,
     pub arguments: Vec<Expr>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, ExpressionType)]
+pub struct Get {
+    pub object: Box<Expr>,
+    pub name: Token,
+}
+
+#[derive(Clone)]
 pub enum Expr {
     Binary(Binary),
     Logical(Logical),
@@ -84,6 +100,7 @@ pub enum Expr {
     Variable(Variable),
     Assign(Assign),
     Call(Call),
+    Get(Get),
 }
 
 impl std::fmt::Debug for Expr {
@@ -97,6 +114,7 @@ impl std::fmt::Debug for Expr {
             Self::Variable(expr) => write!(f, "{:?}", expr),
             Self::Assign(expr) => write!(f, "{:?}", expr),
             Self::Call(expr) => write!(f, "{:?}", expr),
+            Self::Get(expr) => write!(f, "{:?}", expr),
         }
     }
 }

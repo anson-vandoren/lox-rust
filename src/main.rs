@@ -2,7 +2,9 @@ mod ast_printer;
 mod expr;
 mod interpreter;
 mod lox_callable;
+mod lox_class;
 mod lox_function;
+mod lox_instance;
 mod native;
 mod object;
 mod parser;
@@ -14,7 +16,7 @@ mod token_type;
 use std::{env, path::Path};
 
 use ast_printer::AstPrinter;
-use interpreter::{resolver::Resolver, Interpreter};
+use interpreter::{Interpreter, resolver::Resolver};
 use object::Object;
 use parser::Parser;
 use scanner::Scanner;
@@ -110,7 +112,9 @@ impl Lox {
             Ok(s) => {
                 let mut resolver = Resolver::new(&mut self.interpreter);
                 trace!("Resolving vars");
-                resolver.resolve_all(&s);
+                resolver.resolve_all(&s).inspect_err(|_| {
+                    self.had_error = true;
+                })?;
                 self.interpreter.interpret(s).inspect_err(|_| {
                     self.had_runtime_error = true;
                 })?;
@@ -140,6 +144,14 @@ pub enum LoxError {
     Internal { message: String },
     #[snafu()]
     Return { value: Object },
+    #[snafu(whatever, display("Static analysis failed: {message}, {source:?}, {loc}"))]
+    Resolver {
+        message: String,
+        #[snafu(source(from(Box<dyn std::error::Error>,  Some)))]
+        source: Option<Box<dyn std::error::Error>>,
+        #[snafu(implicit)]
+        loc: snafu::Location,
+    },
 }
 
 type Result<T> = std::result::Result<T, LoxError>;

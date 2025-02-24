@@ -14,6 +14,7 @@ impl AstPrinter {
             Expr::Variable(expr) => self.print_variable(expr),
             Expr::Assign(expr) => self.print_assign(expr),
             Expr::Call(expr) => self.print_call(expr),
+            Expr::Get(expr) => self.print_get(expr),
         }
     }
 
@@ -50,7 +51,11 @@ impl AstPrinter {
         self.parenthesize("assign", &[&*expr.value])
     }
 
-    fn print_call(&self, expr: &crate::expr::Call) -> String {
+    fn print_call(&self, _expr: &crate::expr::Call) -> String {
+        todo!()
+    }
+
+    fn print_get(&self, _expr: &crate::expr::Get) -> String {
         todo!()
     }
 }

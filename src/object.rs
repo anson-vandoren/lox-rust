@@ -3,53 +3,42 @@ use std::{cmp, fmt, ops, rc::Rc};
 use ordered_float::OrderedFloat;
 use snafu::Snafu;
 
-use crate::{interpreter::Interpreter, lox_callable::LoxCallable, token::Token, LoxError};
+use crate::{LoxError, interpreter::Interpreter, lox_callable::LoxCallable, lox_instance::LoxInstance, token::Token};
 
 #[derive(Clone)]
 pub enum Object {
-    String(String),
-    Null,
-    Number(OrderedFloat<f64>),
-    Boolean(bool),
     Callable(Rc<dyn LoxCallable>),
+    Instance(LoxInstance),
+    Literal(Literal),
+}
+
+impl From<bool> for Object {
+    fn from(value: bool) -> Self {
+        Object::Literal(Literal::Boolean(value))
+    }
+}
+
+impl From<f64> for Object {
+    fn from(value: f64) -> Self {
+        Object::Literal(Literal::Number(OrderedFloat(value)))
+    }
+}
+
+impl From<OrderedFloat<f64>> for Object {
+    fn from(value: OrderedFloat<f64>) -> Self {
+        Object::Literal(Literal::Number(value))
+    }
 }
 
 impl Eq for Object {}
-
-impl std::hash::Hash for Object {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Object::String(s) => s.hash(state),
-            Object::Null => core::mem::discriminant(self).hash(state),
-            Object::Number(of) => of.hash(state),
-            Object::Boolean(b) => b.hash(state),
-            Object::Callable(c) => {
-                c.arity().hash(state);
-                c.name().hash(state);
-            }
-        }
-    }
-}
-
-impl Object {
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Object::Null => false,
-            Object::Boolean(b) => *b,
-            _ => true,
-        }
-    }
-}
 
 impl fmt::Debug for Object {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Object::String(s) => write!(f, "\"{}\"", &s),
-            Object::Null => fmt::Formatter::write_str(f, "Null"),
-            Object::Number(n) => write!(f, "{}", &n),
-            Object::Boolean(b) => write!(f, "{}", &b),
             Object::Callable(c) => write!(f, "{c}"),
+            Object::Instance(c) => write!(f, "{c}"),
+            Object::Literal(literal) => write!(f, "{literal:?}"),
         }
     }
 }
@@ -96,10 +85,189 @@ impl ObjectRuntimeError {
 
 type Result<T> = std::result::Result<T, ObjectRuntimeError>;
 
-impl Object {
+impl ops::Add for Object {
+    type Output = Result<Object>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first + second)?)),
+            _ => Err(ObjectRuntimeError {
+                found: "non-literal operands".into(),
+                expected: "String + String, or Number + Number".to_string(),
+            }),
+        }
+    }
+}
+
+impl ops::Sub for Object {
+    type Output = Result<Object>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first - second)?)),
+            _ => Err(ObjectRuntimeError {
+                found: "non-literal operands".into(),
+                expected: "String + String, or Number + Number".to_string(),
+            }),
+        }
+    }
+}
+
+impl ops::Neg for Object {
+    type Output = Result<Object>;
+
+    fn neg(self) -> Self::Output {
+        if let Self::Literal(s) = self {
+            Ok(Object::Literal((-s)?))
+        } else {
+            Err(ObjectRuntimeError {
+                found: self.to_string(),
+                expected: "a number to negate".to_string(),
+            })
+        }
+    }
+}
+
+impl ops::Div for Object {
+    type Output = Result<Object>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first / second)?)),
+            _ => Err(ObjectRuntimeError {
+                found: "non-literal operands".into(),
+                expected: "String + String, or Number + Number".to_string(),
+            }),
+        }
+    }
+}
+
+impl ops::Mul for Object {
+    type Output = Result<Object>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first * second)?)),
+            _ => Err(ObjectRuntimeError {
+                found: "non-literal operands".into(),
+                expected: "String + String, or Number + Number".to_string(),
+            }),
+        }
+    }
+}
+
+impl cmp::PartialOrd for Object {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        match (self, other) {
+            (Self::Literal(first), Self::Literal(second)) => first.partial_cmp(second),
+            _ => None,
+        }
+    }
+}
+
+impl cmp::PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Object::Callable(c1), Object::Callable(c2)) => c1.name() == c2.name() && c1.arity() == c2.arity(),
+            (Object::Literal(l1), Object::Literal(l2)) => l1 == l2,
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Object::Callable(c) => write!(f, "callable <{}>", c.name()),
+            Object::Instance(c) => write!(f, "{}", c),
+            Object::Literal(literal) => write!(f, "{literal}"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum Literal {
+    String(String),
+    Null,
+    Number(OrderedFloat<f64>),
+    Boolean(bool),
+}
+
+impl std::ops::Add for Literal {
+    type Output = Result<Literal>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number((first + second).into())),
+            (Literal::String(first), Literal::String(second)) => Ok(format!("{}{}", first, second).into()),
+            _ => Err(ObjectRuntimeError {
+                found: "mismatched operands".into(),
+                expected: "string + string, or number + number".into(),
+            }),
+        }
+    }
+}
+
+impl std::ops::Sub for Literal {
+    type Output = Result<Literal>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number((first - second).into())),
+            _ => Err(ObjectRuntimeError {
+                found: "non-number operand(s)".into(),
+                expected: "number + number".into(),
+            }),
+        }
+    }
+}
+
+impl ops::Neg for Literal {
+    type Output = Result<Literal>;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Literal::Number(n) => Ok(Literal::Number(-n)),
+            _ => Err(ObjectRuntimeError {
+                found: self.to_string(),
+                expected: "a number to negate".to_string(),
+            }),
+        }
+    }
+}
+
+impl ops::Div for Literal {
+    type Output = Result<Literal>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        let lhs = self.into_number()?;
+        let rhs = rhs.into_number()?;
+        Ok(Literal::Number(OrderedFloat(lhs / rhs)))
+    }
+}
+
+impl ops::Mul for Literal {
+    type Output = Result<Literal>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let lhs = self.into_number()?;
+        let rhs = rhs.into_number()?;
+        Ok(Literal::Number(OrderedFloat(lhs * rhs)))
+    }
+}
+
+impl cmp::PartialOrd for Literal {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        let us = self.as_number().ok()?;
+        let them = other.as_number().ok()?;
+        us.partial_cmp(them)
+    }
+}
+
+impl Literal {
     pub fn into_number(self) -> Result<f64> {
         match self {
-            Object::Number(n) => Ok(*n),
+            Literal::Number(n) => Ok(*n),
             _ => Err(ObjectRuntimeError {
                 found: self.to_string(),
                 expected: "f64".to_string(),
@@ -109,7 +277,7 @@ impl Object {
 
     fn as_number(&self) -> Result<&f64> {
         match self {
-            Object::Number(n) => Ok(n),
+            Literal::Number(n) => Ok(n),
             _ => Err(ObjectRuntimeError {
                 found: self.to_string(),
                 expected: "f64".to_string(),
@@ -117,134 +285,21 @@ impl Object {
         }
     }
 
-    pub fn into_string(self) -> Result<String> {
+    pub fn is_truthy(&self) -> bool {
         match self {
-            Object::String(s) => Ok(s),
-            _ => Err(ObjectRuntimeError {
-                found: self.to_string(),
-                expected: "string".to_string(),
-            }),
+            Literal::Null => false,
+            Literal::Boolean(b) => *b,
+            _ => true,
         }
     }
 }
 
-impl ops::Add for Object {
-    type Output = Result<Object>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        if matches!(self, Object::Number(_)) && matches!(rhs, Object::Number(_)) {
-            let lhs = self.into_number()?;
-            let rhs = rhs.into_number()?;
-            return Ok(Object::Number(OrderedFloat(lhs + rhs)));
-        }
-        if matches!(self, Object::String(_)) && matches!(rhs, Object::String(_)) {
-            let lhs = self.into_string()?;
-            let rhs = rhs.into_string()?;
-            return Ok(Object::String(format!("{}{}", lhs, rhs)));
-        }
-
-        Err(ObjectRuntimeError {
-            found: format!("{} + {}", self, rhs),
-            expected: "String + String, or Number + Number".to_string(),
-        })
-    }
-}
-
-impl ops::Sub for Object {
-    type Output = Result<Object>;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        let lhs = self.into_number()?;
-        let rhs = rhs.into_number()?;
-        Ok(Object::Number(OrderedFloat(lhs - rhs)))
-    }
-}
-
-impl ops::Neg for Object {
-    type Output = Result<Object>;
-
-    fn neg(self) -> Self::Output {
-        match self {
-            Object::Number(n) => Ok(Object::Number(-n)),
-            _ => Err(ObjectRuntimeError {
-                found: self.to_string(),
-                expected: "a number to negate".to_string(),
-            }),
-        }
-    }
-}
-
-impl ops::Div for Object {
-    type Output = Result<Object>;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        let lhs = self.into_number()?;
-        let rhs = rhs.into_number()?;
-        Ok(Object::Number(OrderedFloat(lhs / rhs)))
-    }
-}
-
-impl ops::Mul for Object {
-    type Output = Result<Object>;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        let lhs = self.into_number()?;
-        let rhs = rhs.into_number()?;
-        Ok(Object::Number(OrderedFloat(lhs * rhs)))
-    }
-}
-
-impl cmp::PartialOrd for Object {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        let us = self.as_number().ok()?;
-        let them = other.as_number().ok()?;
-        us.partial_cmp(them)
-    }
-}
-
-impl cmp::PartialEq for Object {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Object::String(s1), Object::String(s2)) => s1 == s2,
-            (Object::Null, Object::Null) => true,
-            (Object::Number(n1), Object::Number(n2)) => n1 == n2,
-            (Object::Boolean(b1), Object::Boolean(b2)) => b1 == b2,
-            (Object::Callable(c1), Object::Callable(c2)) => c1.name() == c2.name() && c1.arity() == c2.arity(),
-            _ => false,
-        }
-    }
-}
-
-impl From<String> for Object {
-    fn from(value: String) -> Self {
-        Object::String(value)
-    }
-}
-
-impl From<f64> for Object {
-    fn from(value: f64) -> Self {
-        Object::Number(OrderedFloat(value))
-    }
-}
-
-impl From<()> for Object {
-    fn from(_value: ()) -> Self {
-        Object::Null
-    }
-}
-
-impl From<bool> for Object {
-    fn from(value: bool) -> Self {
-        Object::Boolean(value)
-    }
-}
-
-impl fmt::Display for Object {
+impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Object::String(s) => write!(f, "{}", s),
-            Object::Null => write!(f, "nil"),
-            Object::Number(n) => {
+            Literal::String(s) => write!(f, "{}", s),
+            Literal::Null => write!(f, "nil"),
+            Literal::Number(n) => {
                 if n.fract() == 0.0 {
                     // Don't print decimal places for integers
                     write!(f, "{}", n.trunc())
@@ -252,8 +307,37 @@ impl fmt::Display for Object {
                     write!(f, "{}", n)
                 }
             }
-            Object::Boolean(b) => write!(f, "{}", b),
-            Object::Callable(c) => write!(f, "callable <{}>", c.name()),
+            Literal::Boolean(b) => write!(f, "{}", b),
         }
+    }
+}
+
+impl From<String> for Literal {
+    fn from(v: String) -> Self {
+        Literal::String(v)
+    }
+}
+
+impl From<f64> for Literal {
+    fn from(value: f64) -> Self {
+        Literal::Number(OrderedFloat(value))
+    }
+}
+
+impl From<u32> for Literal {
+    fn from(value: u32) -> Self {
+        Literal::Number(OrderedFloat(value as f64))
+    }
+}
+
+impl From<()> for Literal {
+    fn from(_value: ()) -> Self {
+        Literal::Null
+    }
+}
+
+impl From<bool> for Literal {
+    fn from(value: bool) -> Self {
+        Literal::Boolean(value)
     }
 }

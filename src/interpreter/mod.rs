@@ -4,24 +4,25 @@ pub mod resolver;
 use std::{collections::HashMap, rc::Rc};
 
 use environment::Environment;
-use ordered_float::OrderedFloat;
 use tracing::{instrument, trace};
 
 use super::{LoxError, Result};
 use crate::{
     expr::{self, Expr},
     lox_callable::LoxCallable as _,
+    lox_class::LoxClass,
     lox_function::LoxFunction,
     native::clock::LoxClock,
-    object::Object,
+    object::{Literal, Object},
     stmt::{self, Stmt},
+    token::Token,
     token_type::TokenType,
 };
 
 pub struct Interpreter {
     environment: Box<Environment>,
     pub globals: Environment,
-    locals: HashMap<Expr, u8>,
+    locals: HashMap<Token, u8>,
 }
 
 impl Default for Interpreter {
@@ -41,7 +42,7 @@ impl Interpreter {
         globals.define("clock".to_string(), Object::Callable(Rc::new(LoxClock {})));
         Self {
             environment: Box::new(globals.clone()),
-            globals,
+            globals, // BUG: globals needs to be a ref in environment
             locals: HashMap::new(),
         }
     }
@@ -65,6 +66,7 @@ impl Interpreter {
             Stmt::While(stmt) => self.execute_while_stmt(stmt),
             Stmt::Function(stmt) => self.execute_fn_stmt(stmt),
             Stmt::Return(stmt) => self.execute_return_stmt(stmt),
+            Stmt::Class(stmt) => self.execute_class_stmt(stmt),
         }
     }
 
@@ -76,9 +78,22 @@ impl Interpreter {
             Expr::Grouping(expr) => self.eval_grouping(expr),
             Expr::Literal(expr) => self.eval_literal(expr),
             Expr::Unary(expr) => self.eval_unary(expr),
-            Expr::Variable(_var) => self.eval_variable(expr),
-            Expr::Assign(_assign) => self.eval_assign(expr),
+            Expr::Variable(var) => self.eval_variable(var),
+            Expr::Assign(assign) => self.eval_assign(assign),
             Expr::Call(expr) => self.eval_call(expr),
+            Expr::Get(expr) => self.eval_get(expr),
+        }
+    }
+
+    fn evaluate_literal(&mut self, expr: &Expr) -> Result<Literal> {
+        trace!(?expr, "Evaluating literal expression");
+        let as_obj = self.evaluate(expr)?;
+        if let Object::Literal(lit) = as_obj {
+            Ok(lit)
+        } else {
+            Err(LoxError::Internal {
+                message: format!("Expected a literal, found {:?}", as_obj),
+            })
         }
     }
 
@@ -114,9 +129,6 @@ impl Interpreter {
     // TODO: shouldn't need to be mut
     fn execute_print_stmt(&mut self, stmt: &stmt::Print) -> Result<()> {
         let val = self.evaluate(&stmt.expression)?;
-        if val < Object::Number(OrderedFloat(-1_f64)) {
-            panic!()
-        }
         println!("{}", val);
         Ok(())
     }
@@ -124,7 +136,7 @@ impl Interpreter {
     fn execute_var_stmt(&mut self, stmt: &stmt::Var) -> Result<()> {
         let value = match &stmt.initializer {
             Some(init) => self.evaluate(init)?,
-            None => Object::Null,
+            None => Object::Literal(Literal::Null),
         };
 
         trace!(name = stmt.name.lexeme, ?value, "Defining in env");
@@ -133,7 +145,7 @@ impl Interpreter {
     }
 
     fn execute_if_stmt(&mut self, stmt: &stmt::If) -> Result<()> {
-        let res = self.evaluate(&stmt.condition)?;
+        let res = self.evaluate_literal(&stmt.condition)?;
         if res.is_truthy() {
             self.execute(&stmt.then_branch)?;
         } else if let Some(ref eb) = stmt.else_branch {
@@ -144,10 +156,10 @@ impl Interpreter {
     }
 
     fn execute_while_stmt(&mut self, stmt: &stmt::While) -> Result<()> {
-        let mut res = self.evaluate(&stmt.condition)?;
+        let mut res = self.evaluate_literal(&stmt.condition)?;
         while res.is_truthy() {
             self.execute(&stmt.body)?;
-            res = self.evaluate(&stmt.condition)?;
+            res = self.evaluate_literal(&stmt.condition)?;
         }
 
         Ok(())
@@ -168,9 +180,16 @@ impl Interpreter {
         let value = if let Some(ref val) = stmt.value {
             self.evaluate(val)?
         } else {
-            Object::Null
+            Object::Literal(Literal::Null)
         };
         Err(LoxError::Return { value })
+    }
+
+    fn execute_class_stmt(&mut self, stmt: &stmt::Class) -> Result<()> {
+        self.environment.define(stmt.name.lexeme.clone(), Object::Literal(Literal::Null));
+        let class = LoxClass::new(&stmt.name.lexeme);
+        self.environment.assign(&stmt.name, Object::Callable(Rc::new(class)))?;
+        Ok(())
     }
 
     fn eval_binary(&mut self, expr: &expr::Binary) -> Result<Object> {
@@ -178,28 +197,28 @@ impl Interpreter {
         let right = self.evaluate(&expr.right)?;
 
         let obj = match expr.operator.typ {
-            TokenType::Greater => Object::Boolean(left > right),
-            TokenType::GreaterEqual => Object::Boolean(left >= right),
-            TokenType::Less => Object::Boolean(left < right),
-            TokenType::LessEqual => Object::Boolean(left <= right),
+            TokenType::Greater => (left > right).into(),
+            TokenType::GreaterEqual => (left >= right).into(),
+            TokenType::Less => (left < right).into(),
+            TokenType::LessEqual => (left <= right).into(),
             TokenType::Minus => (left - right).map_err(|e| e.into_lox(&expr.operator))?,
             TokenType::Plus => (left + right).map_err(|e| e.into_lox(&expr.operator))?,
             TokenType::Slash => (left / right).map_err(|e| e.into_lox(&expr.operator))?,
             TokenType::Star => (left * right).map_err(|e| e.into_lox(&expr.operator))?,
-            TokenType::EqualEqual => Object::Boolean(left == right),
-            TokenType::BangEqual => Object::Boolean(left != right),
-            _ => Object::Null,
+            TokenType::EqualEqual => (left == right).into(),
+            TokenType::BangEqual => (left != right).into(),
+            _ => Object::Literal(Literal::Null),
         };
 
         Ok(obj)
     }
 
     fn eval_logical(&mut self, expr: &expr::Logical) -> Result<Object> {
-        let left = self.evaluate(&expr.left)?;
+        let left = self.evaluate_literal(&expr.left)?;
 
         let truthy_left = left.is_truthy();
         match (&expr.operator.typ, truthy_left) {
-            (&TokenType::Or, true) | (&TokenType::And, false) => Ok(left),
+            (&TokenType::Or, true) | (&TokenType::And, false) => Ok(Object::Literal(left)),
             _ => self.evaluate(&expr.right),
         }
     }
@@ -210,17 +229,17 @@ impl Interpreter {
 
     fn eval_literal(&mut self, expr: &expr::Literal) -> Result<Object> {
         // TODO: get rid of clone
-        Ok(expr.value.clone())
+        Ok(Object::Literal(expr.value.clone()))
     }
 
     fn eval_unary(&mut self, expr: &expr::Unary) -> Result<Object> {
-        let right = self.evaluate(&expr.right)?;
+        let right = self.evaluate_literal(&expr.right)?;
         let obj = match expr.operator.typ {
             TokenType::Minus => {
                 let n = right.into_number().map_err(|e| e.into_lox(&expr.operator))?;
-                Object::Number(OrderedFloat(-n))
+                Object::from(-n)
             }
-            TokenType::Bang => Object::Boolean(!right.is_truthy()),
+            TokenType::Bang => (!right.is_truthy()).into(),
             _ => {
                 let token = expr.operator.clone(); // TODO: clone
                 Err(LoxError::Runtime {
@@ -234,28 +253,22 @@ impl Interpreter {
         Ok(obj)
     }
 
-    fn eval_variable(&mut self, expr: &Expr) -> Result<Object> {
+    fn eval_variable(&mut self, expr: &expr::Variable) -> Result<Object> {
         self.lookup_variable(expr)
     }
 
-    fn eval_assign(&mut self, expr: &Expr) -> Result<Object> {
-        if let Expr::Assign(assign) = expr {
-            let name = &assign.name;
-            let value = self.evaluate(&assign.value)?;
-            let distance = self.locals.get(expr);
-            if let Some(distance) = distance {
-                trace!(distance, ?value, ?name, "Assigning to local");
-                self.environment.assign_at(distance, name, value.clone())?;
-            } else {
-                trace!(?value, ?name, "Assigning to global");
-                self.globals.assign(name, value.clone())?;
-            }
-            Ok(value)
+    fn eval_assign(&mut self, assign: &expr::Assign) -> Result<Object> {
+        let name = &assign.name;
+        let value = self.evaluate(&assign.value)?;
+        let distance = self.locals.get(&assign.name);
+        if let Some(distance) = distance {
+            trace!(distance, ?value, ?name, "Assigning to local");
+            self.environment.assign_at(distance, name, value.clone())?;
         } else {
-            Err(LoxError::Internal {
-                message: format!("Tried to assign with expr type {expr:?}"),
-            })
+            trace!(?value, ?name, "Assigning to global");
+            self.environment.assign(name, value.clone())?;
         }
+        Ok(value)
     }
 
     fn eval_call(&mut self, expr: &expr::Call) -> Result<Object> {
@@ -275,29 +288,34 @@ impl Interpreter {
         function.call(self, arguments).map_err(|e| e.into_lox(&expr.paren))
     }
 
-    fn resolve(&mut self, expr: &Expr, i: u8) {
-        println!("Locals before insert {:?}", self.locals);
-        if self.locals.contains_key(expr) {
-            panic!("Tried to insert {expr:?} at depth {i} over {:?}", self.locals.get(expr).unwrap());
+    fn resolve(&mut self, token: &Token, i: u8) {
+        if self.locals.contains_key(token) {
+            panic!("Tried to insert {token:?} at depth {i} over {:?}", self.locals.get(token).unwrap());
         }
-        self.locals.insert(expr.clone(), i);
-        trace!(depth = i, ?expr, locals=?self.locals, "Inserted local");
+        self.locals.insert(token.clone(), i);
+        trace!(depth = i, ?token, locals=?self.locals, "Inserted local");
     }
 
-    fn lookup_variable(&mut self, expr: &Expr) -> Result<Object> {
-        trace!(locals=?self.locals, "looking up {expr:?}");
-        match expr {
-            Expr::Variable(var) => {
-                if let Some(distance) = self.locals.get(expr) {
-                    let val = self.environment.get_at(distance, &var.name.lexeme);
-                    trace!("var: found value {val:?} at distance {distance}\n{:?}", self.locals);
-                    val
-                } else {
-                    trace!(globals=?self.globals.values, "var: no distance");
-                    self.globals.get(&var.name)
-                }
-            }
-            _ => panic!("Tried to lookup from invalid Expr type"),
+    fn lookup_variable(&mut self, var: &expr::Variable) -> Result<Object> {
+        trace!(locals=?self.locals, "looking up {var:?}");
+        if let Some(distance) = self.locals.get(&var.name) {
+            let val = self.environment.get_at(distance, &var.name.lexeme);
+            trace!("var: found value {val:?} at distance {distance}\n{:?}", self.locals);
+            val
+        } else {
+            trace!(globals=?self.globals.values, "var: no distance");
+            self.environment.get(&var.name)
         }
+    }
+
+    fn eval_get(&mut self, expr: &expr::Get) -> std::result::Result<Object, LoxError> {
+        let object = self.evaluate(&expr.object)?;
+        if let Object::Instance(instance) = object {
+            return instance.get(&expr.name);
+        }
+
+        Err(LoxError::Internal {
+            message: "Only instances have properties.".to_string(),
+        })
     }
 }

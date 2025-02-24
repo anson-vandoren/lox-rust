@@ -29,6 +29,7 @@ impl Environment {
     pub fn define(&mut self, name: String, value: Object) {
         trace!(name, ?value, current=?self.values, "defining");
         self.values.insert(name, value);
+        trace!(current=?self.values, "done defining");
     }
 
     pub fn assign(&mut self, name: &Token, value: Object) -> Result<()> {

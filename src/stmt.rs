@@ -34,22 +34,22 @@ impl Print {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Var {
     pub name: Token,
     pub initializer: Option<Expr>,
 }
 
-impl std::fmt::Debug for Var {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let val = if let Some(init) = &self.initializer {
-            format!("{:?}", init)
-        } else {
-            "nil".to_string()
-        };
-        write!(f, "VarStmt({} = {})", self.name.lexeme, val)
-    }
-}
+// impl std::fmt::Debug for Var {
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        let val = if let Some(init) = &self.initializer {
+//            format!("{:?}", init)
+//        } else {
+//            "nil".to_string()
+//        };
+//        write!(f, "VarStmt({} = {})", self.name.lexeme, val)
+//    }
+//}
 
 impl Var {
     pub fn stmt(name: Token, initializer: Option<Expr>) -> Stmt {
@@ -149,6 +149,18 @@ impl Return {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Class {
+    pub name: Token,
+    pub methods: Vec<Function>,
+}
+
+impl Class {
+    pub fn stmt(name: Token, methods: Vec<Function>) -> Stmt {
+        Stmt::Class(Self { name, methods })
+    }
+}
+
 #[derive(Clone)]
 pub enum Stmt {
     Block(Block),
@@ -159,6 +171,7 @@ pub enum Stmt {
     While(While),
     Function(Function),
     Return(Return),
+    Class(Class),
 }
 
 impl std::fmt::Debug for Stmt {
@@ -172,6 +185,7 @@ impl std::fmt::Debug for Stmt {
             Self::Var(stmt) => write!(f, "{:?}", stmt),
             Self::While(stmt) => write!(f, "{:?}", stmt),
             Self::Return(stmt) => write!(f, "{:?}", stmt),
+            Self::Class(stmt) => write!(f, "{:?}", stmt),
         }
     }
 }

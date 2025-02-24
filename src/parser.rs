@@ -2,8 +2,8 @@ use tracing::trace;
 
 use super::{LoxError, Result};
 use crate::{
-    expr::{Assign, Binary, Call, Expr, Grouping, Literal, Logical, Unary, Variable},
-    stmt::{Block, Expression, Function, If, Print, Return, Stmt, Var, While},
+    expr::{Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Unary, Variable},
+    stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While},
     token::Token,
     token_type::TokenType,
 };
@@ -31,17 +31,16 @@ impl Parser {
                 }
             }
         }
-        if had_error {
-            Err(LoxError::Fatal)
-        } else {
-            Ok(statements)
-        }
+        if had_error { Err(LoxError::Fatal) } else { Ok(statements) }
     }
 }
 
 // Declarations
 impl Parser {
     fn declaration(&mut self) -> Result<Stmt> {
+        if self.match_advance(&[TokenType::Class]) {
+            return self.class_declaration();
+        }
         if self.match_advance(&[TokenType::Fun]) {
             return self.function_stmt("function");
         }
@@ -61,6 +60,25 @@ impl Parser {
         self.consume(TokenType::Semicolon, "Expect ';' after variable declaration")?;
 
         Ok(Var::stmt(name, initializer))
+    }
+
+    fn class_declaration(&mut self) -> std::result::Result<Stmt, LoxError> {
+        let name = self.consume(TokenType::Identifier, "Expect class name.")?;
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
+
+        let mut methods = Vec::new();
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            let Ok(Stmt::Function(func)) = self.function_stmt("method") else {
+                return Err(LoxError::Internal {
+                    message: "Did not find method".into(),
+                });
+            };
+            methods.push(func);
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
+
+        Ok(Class::stmt(name, methods))
     }
 }
 
@@ -253,6 +271,7 @@ impl Parser {
 
             if let Expr::Variable(var) = expr {
                 let name = var.name;
+                trace!(?name, ?value, "Assign expr");
                 return Ok(Assign::expr(name, value));
             }
 
@@ -346,6 +365,9 @@ impl Parser {
         loop {
             if self.match_advance(&[TokenType::LeftParen]) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_advance(&[TokenType::Dot]) {
+                let name = self.consume(TokenType::Identifier, "Expect property name after '.'")?;
+                expr = Get::expr(expr, name);
             } else {
                 break;
             }

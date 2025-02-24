@@ -1,10 +1,10 @@
-use crate::{object::Object, token_type::TokenType};
+use crate::{object::Literal, token_type::TokenType};
 
 #[derive(Clone, PartialEq)]
 pub struct Token {
     pub typ: TokenType,
     pub lexeme: String,
-    pub literal: Object,
+    pub literal: Literal,
     pub line: usize,
 }
 
@@ -18,7 +18,7 @@ impl ::core::fmt::Debug for Token {
             TokenType::Minus => write!(f, "-"),
             TokenType::Plus => write!(f, "+"),
             TokenType::EqualEqual => write!(f, "=="),
-            TokenType::Identifier => write!(f, "{}", self.lexeme),
+            TokenType::Identifier => write!(f, "{}({:?})", self.lexeme, self.literal),
             _ => f
                 .debug_struct("Token")
                 .field("typ", &self.typ)
@@ -42,7 +42,7 @@ impl std::hash::Hash for Token {
 impl Eq for Token {}
 
 impl Token {
-    pub fn new(typ: TokenType, lexeme: &str, literal: Object, line: usize) -> Token {
+    pub fn new(typ: TokenType, lexeme: &str, literal: Literal, line: usize) -> Token {
         Token {
             typ,
             lexeme: lexeme.to_string(),

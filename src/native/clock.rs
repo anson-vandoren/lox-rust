@@ -18,7 +18,7 @@ impl std::fmt::Display for LoxClock {
 
 impl LoxCallable for LoxClock {
     fn call(&self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
-        Ok(Object::Number(OrderedFloat(
+        Ok(Object::from(OrderedFloat(
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .expect("Unix Epoch was a long damn time ago")
