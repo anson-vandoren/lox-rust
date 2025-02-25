@@ -29,7 +29,6 @@ impl std::fmt::Display for LoxFunction {
 
 impl LoxCallable for LoxFunction {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
-        // TODO: can we reference the closure instead?
         let mut environment = Environment::with_enclosing(self.closure.clone());
         arguments.into_iter().enumerate().for_each(|(i, arg)| {
             environment.define(self.declaration.params[i].lexeme.clone(), arg);

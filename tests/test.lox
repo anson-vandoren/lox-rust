@@ -1,0 +1,103 @@
+var i = 10;
+var b = true;
+while (i > 0) {
+  print i;
+  i = i - 1;
+  var b = false;
+  assert_eq(b, false);
+}
+assert_eq(i, 0);
+assert_eq(b, true);
+print b;
+print i;
+
+// this is a comment
+"test2";
+0.126 + 3;
+print 12345 * 1;
+5 == (3 + 5);
+/*
+should
+not
+show
+and
+1.23 */
+print "line13" + "foobar";
+
+if (true) {
+  print "I am true";
+} else {
+  print "I am false";
+}
+
+
+for (var i = 0; i < 10; i = i + 1) {
+  print 20 - i;
+}
+
+fun pr(s) { print s; }
+pr("badass");
+
+fun sayHi(first, last) { 
+  print "Hi, " + first + " " + last + "!";
+}
+
+var result = sayHi("Dear", "Reader");
+print result;
+
+fun count(n) {
+  while (n < 100) {
+    if (n == 3) return n; // <--
+    print n;
+    n = n + 1;
+  }
+}
+
+var res = count(1);
+print res;
+
+// Now, the fibonacci test...
+fun fib(n) {
+  if (n <= 1) return n;
+  return fib(n - 2) + fib(n - 1);
+}
+
+print "";
+print "Now printing the fibonaccis";
+for (var i = 0; i < 20; i = i + 1) {
+  print fib(i);
+}
+
+fun makeCounter() {
+  var i = 0;
+  fun count() {
+    i = i + 1;
+    print i;
+  }
+
+  return count;
+}
+
+var counter = makeCounter();
+print "Counter, should be 1 then 2";
+counter(); // "1".
+counter(); // "2".
+
+// closure scope leak
+var a = "global";
+{
+  fun showA() {
+    print a;
+  }
+
+  showA();
+  var a = "block";
+  showA();
+}
+
+
+fun add(first, second) {
+  return first + second;
+}
+var result = add(1, 1);
+assert_eq(result, 2);

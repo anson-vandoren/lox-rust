@@ -1,0 +1,12 @@
+class Ob {
+  doTheThing(name) {
+    print "Do the thing, " + name;
+  }
+}
+
+
+var obj = Ob();
+obj.foo = "bar";
+print obj.foo;
+
+obj.doTheThing("Zhu-Li");
