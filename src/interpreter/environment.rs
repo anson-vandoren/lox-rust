@@ -68,7 +68,7 @@ impl Environment {
         if *distance == 0 {
             self.values.insert(name.to_string(), value);
         } else {
-            let env = ancestor(self.enclosing.clone().unwrap(), distance);
+            let env = ancestor(self.enclosing.clone().unwrap(), distance - 1);
             let mut env = env.as_ref().borrow_mut();
             env.values.insert(name.to_string(), value);
         }
@@ -101,7 +101,7 @@ impl Environment {
                 message: format!("Expected variable '{key}' at distance {distance}"),
             })?)
         } else {
-            let env = ancestor(self.enclosing.clone().unwrap(), distance);
+            let env = ancestor(self.enclosing.clone().unwrap(), distance - 1);
             Ok(env.borrow().values.get(key).cloned().ok_or(LoxError::Internal {
                 message: format!("Expected variable '{key}' at distance {distance}"),
             })?)
@@ -109,10 +109,10 @@ impl Environment {
     }
 }
 
-fn ancestor(env: RcCell<Environment>, distance: &u8) -> RcCell<Environment> {
+fn ancestor(env: RcCell<Environment>, distance: u8) -> RcCell<Environment> {
     let mut env = env;
     trace!(values = ?env.as_ref().borrow().values, "env top-level");
-    for i in 0_u8..*distance {
+    for i in 0_u8..distance {
         let next = {
             let cur_borrow = env.borrow();
             cur_borrow.enclosing.as_ref().unwrap().clone()
