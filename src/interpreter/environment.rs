@@ -1,13 +1,18 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, hash_map::Entry},
+    rc::Rc,
+};
 
 use tracing::trace;
 
 use crate::{LoxError, Result, object::Object, token::Token};
+pub(crate) type RcCell<T> = Rc<RefCell<T>>;
 
 #[derive(Clone, Debug, Default)]
 pub struct Environment {
     pub values: HashMap<String, Object>,
-    pub enclosing: Option<Box<Environment>>,
+    pub enclosing: Option<RcCell<Environment>>,
 }
 
 impl Environment {
@@ -18,8 +23,9 @@ impl Environment {
         }
     }
 
-    pub fn with_enclosing(enclosing: Box<Environment>) -> Environment {
-        trace!(new_top=?enclosing.values, "with_enclosing");
+    pub fn with_enclosing(enclosing: RcCell<Environment>) -> Environment {
+        let values = enclosing.as_ref();
+        trace!(new_top=?values, "with_enclosing");
         Self {
             values: HashMap::new(),
             enclosing: Some(enclosing),
@@ -36,7 +42,8 @@ impl Environment {
         trace!(?name, ?value, values = ?self.values, ">> assign()");
         match self.values.entry(name.lexeme.clone()) {
             Entry::Vacant(_) => {
-                if let Some(ref mut outer) = self.enclosing {
+                if let Some(ref outer) = self.enclosing {
+                    let mut outer = outer.as_ref().borrow_mut();
                     let res = outer.assign(name, value);
                     trace!(values = ?self.values, "<< assign(), vacant");
                     res
@@ -58,7 +65,13 @@ impl Environment {
 
     pub fn assign_at(&mut self, distance: &u8, name: &str, value: Object) -> Result<()> {
         trace!(distance, ?name, ?value, "Assigning to env ancestor");
-        self.ancestor(distance).values.insert(name.to_string(), value);
+        if *distance == 0 {
+            self.values.insert(name.to_string(), value);
+        } else {
+            let env = ancestor(self.enclosing.clone().unwrap(), distance);
+            let mut env = env.as_ref().borrow_mut();
+            env.values.insert(name.to_string(), value);
+        }
         Ok(())
     }
 
@@ -68,6 +81,7 @@ impl Environment {
             Some(val) => Ok(val.clone()),
             None => {
                 if let Some(outer) = &self.enclosing {
+                    let outer = outer.as_ref().borrow();
                     outer.get(name)
                 } else {
                     Err(LoxError::Runtime {
@@ -82,20 +96,32 @@ impl Environment {
 
     pub fn get_at(&mut self, distance: &u8, key: &str) -> Result<Object> {
         trace!(distance, key, "Get at");
-        self.ancestor(distance).values.get(key).cloned().ok_or(LoxError::Internal {
-            message: format!("Expected variable '{key}' at distance {distance}"),
-        })
-    }
-
-    fn ancestor(&mut self, distance: &u8) -> &mut Environment {
-        let mut env = self;
-        trace!(values = ?env.values, "env top-level");
-        for i in 0_u8..*distance {
-            env = &mut *env.enclosing.as_mut().expect("Should have had an enclosing scope");
-            let dist = i + 1;
-            trace!(values = ?env.values, "env at depth {dist}");
+        if *distance == 0 {
+            Ok(self.values.get(key).cloned().ok_or(LoxError::Internal {
+                message: format!("Expected variable '{key}' at distance {distance}"),
+            })?)
+        } else {
+            let env = ancestor(self.enclosing.clone().unwrap(), distance);
+            Ok(env.borrow().values.get(key).cloned().ok_or(LoxError::Internal {
+                message: format!("Expected variable '{key}' at distance {distance}"),
+            })?)
         }
-        trace!(values=?env.values, distance, "Chosen ancestor env");
-        env
     }
+}
+
+fn ancestor(env: RcCell<Environment>, distance: &u8) -> RcCell<Environment> {
+    let mut env = env;
+    trace!(values = ?env.as_ref().borrow().values, "env top-level");
+    for i in 0_u8..*distance {
+        let next = {
+            let cur_borrow = env.borrow();
+            cur_borrow.enclosing.as_ref().unwrap().clone()
+        };
+
+        env = next;
+        let dist = i + 1;
+        trace!(values = ?env.as_ref().borrow().values, "env at depth {dist}");
+    }
+    trace!(values=?env.as_ref().borrow().values, distance, "Chosen ancestor env");
+    env
 }

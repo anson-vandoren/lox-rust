@@ -1,9 +1,9 @@
 pub mod environment;
 pub mod resolver;
 
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use environment::Environment;
+use environment::{Environment, RcCell};
 use snafu::whatever;
 use tracing::{instrument, trace};
 
@@ -21,17 +21,17 @@ use crate::{
 };
 
 pub struct Interpreter {
-    environment: Box<Environment>,
-    pub globals: Environment,
+    environment: RcCell<Environment>,
+    pub globals: RcCell<Environment>,
     locals: HashMap<Token, u8>,
 }
 
 impl Default for Interpreter {
     fn default() -> Self {
-        let bare = Box::new(Environment::new());
+        let bare = Rc::new(RefCell::new(Environment::new()));
         Self {
             environment: bare.clone(),
-            globals: *bare,
+            globals: bare,
             locals: HashMap::new(),
         }
     }
@@ -42,9 +42,10 @@ impl Interpreter {
         let mut globals = Environment::new();
         globals.define("clock".to_string(), Object::Callable(Rc::new(LoxClock {})));
         globals.define("assert_eq".to_string(), Object::Callable(Rc::new(LoxAssertEq {})));
+        let globals = Rc::new(RefCell::new(globals));
         Self {
-            environment: Box::new(globals.clone()),
-            globals, // BUG: globals needs to be a ref in environment
+            environment: globals.clone(),
+            globals,
             locals: HashMap::new(),
         }
     }
@@ -112,21 +113,22 @@ impl Interpreter {
 
     fn enter_scope(&mut self, nested_env: Environment) {
         trace!(values=?nested_env.values, "entering scope");
-        let current_env = std::mem::replace(&mut self.environment, Box::new(nested_env));
-        self.environment.enclosing = Some(current_env);
-        trace!(top=?self.environment.values, enclosing=?self.environment.enclosing.as_ref().unwrap().values, "scope is entered");
+        let new_env = Rc::new(RefCell::new(nested_env));
+        new_env.borrow_mut().enclosing = Some(self.environment.clone());
+        self.environment = new_env;
+        trace!(top=?self.environment.borrow().values, enclosing=?self.environment.borrow().enclosing.as_ref().unwrap().borrow().values, "scope is entered");
     }
 
     fn exit_scope(&mut self) -> Result<()> {
         trace!("exiting scope");
-        if let Some(enclosing) = self.environment.enclosing.take() {
-            self.environment = enclosing;
-            Ok(())
-        } else {
-            Err(LoxError::Internal {
-                message: "Interpreter did not have an enclosing environment when exiting scope.".to_string(),
-            })
-        }
+        let new_env = self
+            .environment
+            .borrow_mut()
+            .enclosing
+            .take()
+            .expect("Exited scope with no enclosing");
+        self.environment = new_env;
+        Ok(())
     }
 
     // TODO: shouldn't need to be mut
@@ -143,7 +145,7 @@ impl Interpreter {
         };
 
         trace!(name = stmt.name.lexeme, ?value, "Defining in env");
-        self.environment.define(stmt.name.lexeme.clone(), value);
+        self.environment.borrow_mut().define(stmt.name.lexeme.clone(), value);
         Ok(())
     }
 
@@ -169,8 +171,9 @@ impl Interpreter {
     }
 
     fn execute_fn_stmt(&mut self, stmt: &stmt::Function) -> Result<()> {
-        let function = LoxFunction::new(stmt.clone(), *self.environment.clone());
+        let function = LoxFunction::new(stmt.clone(), self.environment.clone());
         self.environment
+            .borrow_mut()
             .define(stmt.name.lexeme.clone(), Object::Callable(Rc::new(function)));
         Ok(())
     }
@@ -185,16 +188,18 @@ impl Interpreter {
     }
 
     fn execute_class_stmt(&mut self, stmt: &stmt::Class) -> Result<()> {
-        self.environment.define(stmt.name.lexeme.clone(), Object::Literal(Literal::Null));
+        self.environment
+            .borrow_mut()
+            .define(stmt.name.lexeme.clone(), Object::Literal(Literal::Null));
 
         let mut methods = HashMap::new();
         for method in stmt.methods.iter() {
-            let function = LoxFunction::new(method.clone(), *self.environment.clone());
+            let function = LoxFunction::new(method.clone(), self.environment.clone());
             methods.insert(method.name.lexeme.clone(), function);
         }
 
         let class = LoxClass::new(&stmt.name.lexeme, methods);
-        self.environment.assign(&stmt.name, Object::Callable(Rc::new(class)))?;
+        self.environment.borrow_mut().assign(&stmt.name, Object::Callable(Rc::new(class)))?;
         Ok(())
     }
 
@@ -269,10 +274,10 @@ impl Interpreter {
         let distance = self.locals.get(&assign.name);
         if let Some(distance) = distance {
             trace!(distance, ?value, ?name, "Assigning to local");
-            self.environment.assign_at(distance, &name.lexeme, value.clone())?;
+            self.environment.borrow_mut().assign_at(distance, &name.lexeme, value.clone())?;
         } else {
             trace!(?value, ?name, "Assigning to global");
-            self.environment.assign(name, value.clone())?;
+            self.environment.borrow_mut().assign(name, value.clone())?;
         }
         Ok(value)
     }
@@ -305,12 +310,12 @@ impl Interpreter {
     fn lookup_variable(&mut self, var: &expr::Variable) -> Result<Object> {
         trace!(locals=?self.locals, "looking up {var:?}");
         if let Some(distance) = self.locals.get(&var.name) {
-            let val = self.environment.get_at(distance, &var.name.lexeme);
+            let val = self.environment.borrow_mut().get_at(distance, &var.name.lexeme);
             trace!("var: found value {val:?} at distance {distance}\n{:?}", self.locals);
             val
         } else {
-            trace!(globals=?self.globals.values, "var: no distance");
-            self.environment.get(&var.name)
+            trace!(globals=?self.globals.borrow().values, "var: no distance");
+            self.environment.borrow().get(&var.name)
         }
     }
 
@@ -331,14 +336,14 @@ impl Interpreter {
         if let Object::Instance(mut object) = object {
             let value = self.evaluate(&expr.value)?;
             object.set(expr.name.clone(), value.clone());
-            trace!(object = ?object, ?expr, ?value, env = ?self.environment.values, "Object after setting");
+            trace!(object = ?object, ?expr, ?value, env = ?self.environment.borrow().values, "Object after setting");
 
             // Update env with the mutated object
             let Expr::Variable(ref var_expr) = *expr.object else {
                 whatever!("wrong kind of expr")
             };
             trace!(name = ?var_expr.name, "Updating mutated obj");
-            self.environment.assign(&var_expr.name, Object::Instance(object))?;
+            self.environment.borrow_mut().assign(&var_expr.name, Object::Instance(object))?;
 
             Ok(value)
         } else {

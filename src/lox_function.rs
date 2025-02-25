@@ -1,6 +1,9 @@
 use crate::{
     LoxError,
-    interpreter::{Interpreter, environment::Environment},
+    interpreter::{
+        Interpreter,
+        environment::{Environment, RcCell},
+    },
     lox_callable::LoxCallable,
     object::{Literal, Object, ObjectRuntimeError},
     stmt::Function,
@@ -9,11 +12,11 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct LoxFunction {
     declaration: Function,
-    closure: Environment,
+    closure: RcCell<Environment>,
 }
 
 impl LoxFunction {
-    pub fn new(declaration: Function, closure: Environment) -> Self {
+    pub fn new(declaration: Function, closure: RcCell<Environment>) -> Self {
         Self { declaration, closure }
     }
 }
@@ -27,7 +30,7 @@ impl std::fmt::Display for LoxFunction {
 impl LoxCallable for LoxFunction {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
         // TODO: can we reference the closure instead?
-        let mut environment = Environment::with_enclosing(Box::new(self.closure.clone()));
+        let mut environment = Environment::with_enclosing(self.closure.clone());
         arguments.into_iter().enumerate().for_each(|(i, arg)| {
             environment.define(self.declaration.params[i].lexeme.clone(), arg);
         });
