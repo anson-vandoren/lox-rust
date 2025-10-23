@@ -18,7 +18,7 @@ impl ::core::fmt::Debug for Token {
             TokenType::Minus => write!(f, "-"),
             TokenType::Plus => write!(f, "+"),
             TokenType::EqualEqual => write!(f, "=="),
-            //TokenType::Identifier => write!(f, "{}({:?})", self.lexeme, self.literal),
+            TokenType::Identifier => write!(f, "{}{{ {:?} }}[L{}]", self.lexeme, self.literal, self.line),
             _ => f
                 .debug_struct("Token")
                 .field("typ", &self.typ)

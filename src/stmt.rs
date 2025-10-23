@@ -34,22 +34,35 @@ impl Print {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Var {
     pub name: Token,
     pub initializer: Option<Expr>,
 }
+// var captured = obj.captureThis("baz");
 
-// impl std::fmt::Debug for Var {
-//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//        let val = if let Some(init) = &self.initializer {
-//            format!("{:?}", init)
-//        } else {
-//            "nil".to_string()
-//        };
-//        write!(f, "VarStmt({} = {})", self.name.lexeme, val)
-//    }
-//}
+impl std::fmt::Debug for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let line = self.name.line;
+        let name = self.name.lexeme.clone();
+        let val = if let Some(init) = &self.initializer {
+            if let Expr::Call(call) = init {
+                let callee = call.callee.clone();
+                let args = call.arguments.iter().map(|e| format!("{:?}", e)).collect::<Vec<_>>().join(",");
+                if let Expr::Get(getter) = *callee {
+                    format!("{:?}({})", getter, args)
+                } else {
+                    format!("{:?}", call)
+                }
+            } else {
+                format!("{:?}", init)
+            }
+        } else {
+            "nil".to_string()
+        };
+        write!(f, "VarStmt(var {} = {} [Line: {}])", name, val, line)
+    }
+}
 
 impl Var {
     pub fn stmt(name: Token, initializer: Option<Expr>) -> Stmt {

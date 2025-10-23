@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use tracing::trace;
 
@@ -22,18 +22,20 @@ impl LoxInstance {
         trace!(fields = ?self.fields, ?name, class = ?self.class, "LoxInstance.get()");
         let field = self.fields.get(&name.lexeme).cloned();
         if let Some(field) = field {
+            trace!(?field, "<<LoxInstance.get(), SUCCESS(field)");
             return Ok(field);
         }
 
         let method = self.class.find_method(&name.lexeme);
         if let Some(method) = method {
-            return Ok(Object::Callable(Rc::new(method)));
+            trace!(?method, "<<LoxInstance.get(), SUCCESS(method)");
+            return method.bind(self);
         }
 
         Err(LoxError::Runtime {
             expected: format!("method or field named {}", name.lexeme),
             found: "no such method or field".into(),
-            token: name.clone(),
+            line: Some(name.line),
         })
     }
 
@@ -45,7 +47,7 @@ impl LoxInstance {
 
 impl std::fmt::Display for LoxInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} instance - {:?}", self.class, self.fields)
+        write!(f, "[Object {}] - {:?}", self.class, self.fields)
     }
 }
 

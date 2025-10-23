@@ -13,7 +13,7 @@ mod stmt;
 mod token;
 mod token_type;
 
-use std::{env, path::Path};
+use std::{env, fs::File, path::Path};
 
 use ast_printer::AstPrinter;
 use interpreter::{Interpreter, resolver::Resolver};
@@ -21,9 +21,8 @@ use object::Object;
 use parser::Parser;
 use scanner::Scanner;
 use snafu::prelude::*;
-use token::Token;
-use tracing::{instrument, trace};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{instrument, level_filters::LevelFilter, trace};
+use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
     init_tracing();
@@ -42,17 +41,29 @@ fn main() {
 
 fn init_tracing() {
     let format = format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME"));
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format.into());
+    let mut layers = Vec::new();
+    let stdout = tracing_subscriber::fmt::layer()
+        .with_line_number(true)
+        .compact()
+        .with_filter(filter)
+        .boxed();
+    layers.push(stdout);
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format.into()),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_line_number(true)
-                .compact(),
-        )
-        .init();
+    let file = File::create("./logs/log.json").expect("Could not create log file");
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_target(false)
+        .without_time()
+        .with_writer(file)
+        .json()
+        .with_span_list(false)
+        .flatten_event(true)
+        .with_current_span(false)
+        .with_filter(LevelFilter::TRACE)
+        .boxed();
+    layers.push(file_layer);
+
+    tracing_subscriber::Registry::default().with(layers).init();
 }
 
 struct Lox {
@@ -72,9 +83,7 @@ impl Lox {
 
     pub fn run_file<T: AsRef<Path> + Into<String>>(&mut self, script_path: T) -> i32 {
         let file = std::fs::read_to_string(&script_path)
-            .context(FileSnafu {
-                path: script_path.into(),
-            })
+            .context(FileSnafu { path: script_path.into() })
             .expect("Cannot read file");
 
         match self.run(file) {
@@ -107,7 +116,7 @@ impl Lox {
         }
     }
 
-    #[instrument(skip(self, script), err, ret, level = "trace")]
+    #[instrument(skip(self, script))]
     fn run(&mut self, script: String) -> Result<()> {
         let scanner = Scanner::new(script);
         let tokens = scanner.scan_tokens().inspect_err(|_| {
@@ -139,34 +148,24 @@ impl Lox {
 #[derive(Debug, Snafu)]
 pub enum LoxError {
     #[snafu(display("[line {line}] Error {whence}: {message}"))]
-    Parsing {
-        line: usize,
-        whence: String,
-        message: String,
-    },
+    Parsing { line: usize, whence: String, message: String },
     #[snafu(display("IO error"))]
     Io { source: std::io::Error },
     #[snafu(display("Could not read source file at '{path}'"))]
-    File {
-        source: std::io::Error,
-        path: String,
-    },
+    File { source: std::io::Error, path: String },
     #[snafu(display("Fatal error, exiting"))]
     Fatal,
-    #[snafu(display("Runtime error - found {found}, expected {expected}\n[line {}]", token.line))]
+    #[snafu(display("Runtime error - found {found}, expected {expected}\n[line {}]", line.unwrap_or(0)))]
     Runtime {
         found: String,
         expected: String,
-        token: Token,
+        line: Option<usize>,
     },
     #[snafu(display("Internal error: {message}"))]
     Internal { message: String },
     #[snafu()]
     Return { value: Object },
-    #[snafu(
-        whatever,
-        display("Static analysis failed: {message}, {source:?}, {loc}")
-    )]
+    #[snafu(whatever, display("Static analysis failed: {message}, {source:?}, {loc}"))]
     Resolver {
         message: String,
         #[snafu(source(from(Box<dyn std::error::Error>,  Some)))]
@@ -174,6 +173,19 @@ pub enum LoxError {
         #[snafu(implicit)]
         loc: snafu::Location,
     },
+}
+
+impl LoxError {
+    pub fn add_line(self, line: usize) -> LoxError {
+        match self {
+            LoxError::Runtime { found, expected, line: _ } => LoxError::Runtime {
+                found,
+                expected,
+                line: Some(line),
+            },
+            _ => self,
+        }
+    }
 }
 
 type Result<T> = std::result::Result<T, LoxError>;

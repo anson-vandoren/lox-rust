@@ -1,11 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    interpreter::Interpreter,
-    lox_callable::LoxCallable,
-    lox_function::LoxFunction,
-    lox_instance::LoxInstance,
-    object::{Object, ObjectRuntimeError},
+    LoxError, interpreter::Interpreter, lox_callable::LoxCallable, lox_function::LoxFunction, lox_instance::LoxInstance, object::Object,
 };
 
 #[derive(Clone, Debug)]
@@ -31,7 +27,7 @@ impl LoxClass {
 }
 
 impl LoxCallable for LoxClass {
-    fn call(&self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
+    fn call(&self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Result<Object, LoxError> {
         Ok(Object::Instance(LoxInstance::new(self.clone())))
     }
 

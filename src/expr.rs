@@ -84,10 +84,21 @@ pub struct Call {
     pub arguments: Vec<Expr>,
 }
 
-#[derive(Clone, Debug, ExpressionType)]
+#[derive(Clone, ExpressionType)]
 pub struct Get {
     pub object: Box<Expr>,
     pub name: Token,
+}
+
+impl std::fmt::Debug for Get {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let obj_name = match *self.object.clone() {
+            Expr::Variable(var) => var.name.lexeme,
+            o => format!("{:?}", o),
+        };
+        let member = self.name.lexeme.clone();
+        write!(f, "{obj_name}.{member}")
+    }
 }
 
 #[derive(Clone, Debug, ExpressionType)]
@@ -95,6 +106,11 @@ pub struct Set {
     pub object: Box<Expr>,
     pub name: Token,
     pub value: Box<Expr>,
+}
+
+#[derive(Clone, Debug, ExpressionType)]
+pub struct This {
+    pub keyword: Token,
 }
 
 #[derive(Clone)]
@@ -109,6 +125,7 @@ pub enum Expr {
     Call(Call),
     Get(Get),
     Set(Set),
+    This(This),
 }
 
 impl std::fmt::Debug for Expr {
@@ -124,6 +141,7 @@ impl std::fmt::Debug for Expr {
             Self::Call(expr) => write!(f, "{:?}", expr),
             Self::Get(expr) => write!(f, "{:?}", expr),
             Self::Set(expr) => write!(f, "{:?}", expr),
+            Self::This(expr) => write!(f, "{:?}", expr),
         }
     }
 }

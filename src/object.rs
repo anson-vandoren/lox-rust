@@ -1,9 +1,8 @@
 use std::{cmp, fmt, ops, rc::Rc};
 
 use ordered_float::OrderedFloat;
-use snafu::Snafu;
 
-use crate::{LoxError, interpreter::Interpreter, lox_callable::LoxCallable, lox_instance::LoxInstance, token::Token};
+use crate::{LoxError, interpreter::Interpreter, lox_callable::LoxCallable, lox_instance::LoxInstance};
 
 #[derive(Clone)]
 pub enum Object {
@@ -44,7 +43,7 @@ impl fmt::Debug for Object {
 }
 
 impl LoxCallable for Object {
-    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object> {
+    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, LoxError> {
         match self {
             Self::Callable(c) => c.call(interpreter, arguments),
             _ => panic!("{:?} is not a LoxCallable", &self),
@@ -66,91 +65,77 @@ impl LoxCallable for Object {
     }
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(display("Object comparison error: expected {expected}, but found {found}"))]
-pub struct ObjectRuntimeError {
-    pub found: String,
-    pub expected: String,
-}
-
-impl ObjectRuntimeError {
-    pub fn into_lox(self, token: &Token) -> LoxError {
-        LoxError::Runtime {
-            found: self.found,
-            expected: self.expected,
-            token: token.clone(),
-        }
-    }
-}
-
-type Result<T> = std::result::Result<T, ObjectRuntimeError>;
-
 impl ops::Add for Object {
-    type Output = Result<Object>;
+    type Output = Result<Object, LoxError>;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first + second)?)),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: "non-literal operands".into(),
                 expected: "String + String, or Number + Number".to_string(),
+                line: None,
             }),
         }
     }
 }
 
 impl ops::Sub for Object {
-    type Output = Result<Object>;
+    type Output = Result<Object, LoxError>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first - second)?)),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: "non-literal operands".into(),
                 expected: "String + String, or Number + Number".to_string(),
+                line: None,
             }),
         }
     }
 }
 
 impl ops::Neg for Object {
-    type Output = Result<Object>;
+    type Output = Result<Object, LoxError>;
 
     fn neg(self) -> Self::Output {
         if let Self::Literal(s) = self {
             Ok(Object::Literal((-s)?))
         } else {
-            Err(ObjectRuntimeError {
+            Err(LoxError::Runtime {
                 found: self.to_string(),
                 expected: "a number to negate".to_string(),
+                line: None,
             })
         }
     }
 }
 
 impl ops::Div for Object {
-    type Output = Result<Object>;
+    type Output = Result<Object, LoxError>;
 
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first / second)?)),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: "non-literal operands".into(),
                 expected: "String + String, or Number + Number".to_string(),
+                line: None,
             }),
         }
     }
 }
 
 impl ops::Mul for Object {
-    type Output = Result<Object>;
+    type Output = Result<Object, LoxError>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::Literal(first), Self::Literal(second)) => Ok(Object::Literal((first * second)?)),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: "non-literal operands".into(),
                 expected: "String + String, or Number + Number".to_string(),
+                line: None,
             }),
         }
     }
@@ -194,50 +179,53 @@ pub enum Literal {
 }
 
 impl std::ops::Add for Literal {
-    type Output = Result<Literal>;
+    type Output = Result<Literal, LoxError>;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number(first + second)),
             (Literal::String(first), Literal::String(second)) => Ok(format!("{}{}", first, second).into()),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: "mismatched operands".into(),
                 expected: "string + string, or number + number".into(),
+                line: None,
             }),
         }
     }
 }
 
 impl std::ops::Sub for Literal {
-    type Output = Result<Literal>;
+    type Output = Result<Literal, LoxError>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Literal::Number(first), Literal::Number(second)) => Ok(Literal::Number(first - second)),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: "non-number operand(s)".into(),
                 expected: "number + number".into(),
+                line: None,
             }),
         }
     }
 }
 
 impl ops::Neg for Literal {
-    type Output = Result<Literal>;
+    type Output = Result<Literal, LoxError>;
 
     fn neg(self) -> Self::Output {
         match self {
             Literal::Number(n) => Ok(Literal::Number(-n)),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: self.to_string(),
                 expected: "a number to negate".to_string(),
+                line: None,
             }),
         }
     }
 }
 
 impl ops::Div for Literal {
-    type Output = Result<Literal>;
+    type Output = Result<Literal, LoxError>;
 
     fn div(self, rhs: Self) -> Self::Output {
         let lhs = self.into_number()?;
@@ -247,7 +235,7 @@ impl ops::Div for Literal {
 }
 
 impl ops::Mul for Literal {
-    type Output = Result<Literal>;
+    type Output = Result<Literal, LoxError>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         let lhs = self.into_number()?;
@@ -265,22 +253,24 @@ impl cmp::PartialOrd for Literal {
 }
 
 impl Literal {
-    pub fn into_number(self) -> Result<f64> {
+    pub fn into_number(self) -> Result<f64, LoxError> {
         match self {
             Literal::Number(n) => Ok(*n),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: self.to_string(),
                 expected: "f64".to_string(),
+                line: None,
             }),
         }
     }
 
-    fn as_number(&self) -> Result<&f64> {
+    fn as_number(&self) -> Result<&f64, LoxError> {
         match self {
             Literal::Number(n) => Ok(n),
-            _ => Err(ObjectRuntimeError {
+            _ => Err(LoxError::Runtime {
                 found: self.to_string(),
                 expected: "f64".to_string(),
+                line: None,
             }),
         }
     }

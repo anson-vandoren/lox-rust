@@ -2,11 +2,7 @@ use std::time::SystemTime;
 
 use ordered_float::OrderedFloat;
 
-use crate::{
-    interpreter::Interpreter,
-    lox_callable::LoxCallable,
-    object::{Object, ObjectRuntimeError},
-};
+use crate::{LoxError, interpreter::Interpreter, lox_callable::LoxCallable, object::Object};
 
 pub struct LoxClock {}
 
@@ -17,11 +13,7 @@ impl std::fmt::Display for LoxClock {
 }
 
 impl LoxCallable for LoxClock {
-    fn call(
-        &self,
-        _interpreter: &mut Interpreter,
-        _arguments: Vec<Object>,
-    ) -> Result<Object, ObjectRuntimeError> {
+    fn call(&self, _interpreter: &mut Interpreter, _arguments: Vec<Object>) -> Result<Object, LoxError> {
         Ok(Object::from(OrderedFloat(
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)

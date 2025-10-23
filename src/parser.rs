@@ -2,7 +2,7 @@ use tracing::trace;
 
 use super::{LoxError, Result};
 use crate::{
-    expr::{Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Set, Unary, Variable},
+    expr::{Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Set, This, Unary, Variable},
     stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While},
     token::Token,
     token_type::TokenType,
@@ -410,6 +410,10 @@ impl Parser {
             TokenType::True => Ok(Literal::expr(true.into())),
             TokenType::Nil => Ok(Literal::expr(().into())),
             TokenType::Number | TokenType::String => Ok(Literal::expr(self.previous().literal)),
+            TokenType::This => {
+                trace!(this = ?self.previous(), "Parsed this");
+                Ok(This::expr(self.previous()))
+            }
             TokenType::Identifier => Ok(Variable::expr(self.previous())),
             TokenType::LeftParen => {
                 let expr = self.expression()?;

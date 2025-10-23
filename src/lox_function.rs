@@ -1,3 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
+use tracing::{instrument, trace};
+
 use crate::{
     LoxError,
     interpreter::{
@@ -5,7 +9,8 @@ use crate::{
         environment::{Environment, RcCell},
     },
     lox_callable::LoxCallable,
-    object::{Literal, Object, ObjectRuntimeError},
+    lox_instance::LoxInstance,
+    object::{Literal, Object},
     stmt::Function,
 };
 
@@ -19,6 +24,17 @@ impl LoxFunction {
     pub fn new(declaration: Function, closure: RcCell<Environment>) -> Self {
         Self { declaration, closure }
     }
+
+    #[instrument(skip(self, instance))]
+    pub(crate) fn bind(&self, instance: &LoxInstance) -> Result<Object, LoxError> {
+        let mut environment = Environment::with_parent(self.closure.clone());
+        environment.define("this".into(), Object::Instance(instance.clone()));
+        trace!(vals = ?environment.values, "After binding this");
+
+        let environment = Rc::new(RefCell::new(environment));
+
+        Ok(Object::Callable(Rc::new(LoxFunction::new(self.declaration.clone(), environment))))
+    }
 }
 
 impl std::fmt::Display for LoxFunction {
@@ -28,11 +44,16 @@ impl std::fmt::Display for LoxFunction {
 }
 
 impl LoxCallable for LoxFunction {
-    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, ObjectRuntimeError> {
-        let mut environment = Environment::with_enclosing(self.closure.clone());
+    #[instrument(skip(self, interpreter), err)]
+    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Object>) -> Result<Object, LoxError> {
+        let mut environment = Environment::with_parent(self.closure.clone());
+        trace!(?environment, "Initial enclosed environment");
         arguments.into_iter().enumerate().for_each(|(i, arg)| {
-            environment.define(self.declaration.params[i].lexeme.clone(), arg);
+            let name = self.declaration.params[i].lexeme.clone();
+            trace!(name, ?arg, "Defining additional argument in environment");
+            environment.define(name, arg);
         });
+        trace!(?environment, "Environment for call");
 
         match interpreter.execute_block(&self.declaration.body, environment).map_err(|e| match e {
             LoxError::Return { value } => Ok(value),
@@ -40,13 +61,7 @@ impl LoxCallable for LoxFunction {
         }) {
             Ok(()) => Ok(Object::Literal(Literal::Null)),
             Err(Ok(value)) => Ok(value),
-            Err(Err(e)) => Err(match e {
-                LoxError::Runtime { found, expected, token: _ } => ObjectRuntimeError { found, expected },
-                _ => ObjectRuntimeError {
-                    found: "unknown".to_string(),
-                    expected: "unknown".to_string(),
-                },
-            }),
+            Err(Err(e)) => Err(e),
         }
     }
 

@@ -8,7 +8,7 @@ rustyline = "15.0.0"
 snafu = "0.8.5"
 macros = { path = "./macros/" }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 ordered-float = "4.6.0"
 pretty_assertions = { version = "1.4.1", features = ["unstable"] }
 

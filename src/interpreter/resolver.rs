@@ -5,7 +5,7 @@ use tracing::trace;
 
 use super::Interpreter;
 use crate::{
-    Result,
+    LoxError, Result,
     expr::Expr,
     stmt::{self, Stmt},
     token::Token,
@@ -96,6 +96,7 @@ impl Resolver<'_> {
                 self.resolve_expr(&set.value)?;
                 self.resolve_expr(&set.object)?;
             }
+            Expr::This(this) => self.resolve_local(&this.keyword)?,
         }
         trace!(?expr, "Exited expression");
         Ok(())
@@ -153,10 +154,20 @@ impl Resolver<'_> {
                 self.declare(&stmt.name.lexeme)?;
                 self.define(&stmt.name.lexeme)?;
 
+                self.begin_scope();
+                self.scopes
+                    .last_mut()
+                    .ok_or(LoxError::Internal {
+                        message: "Didn't have a last scope".into(),
+                    })?
+                    .insert("this".into(), true);
+
                 for method in stmt.methods.iter() {
                     let declaration = FunctionType::Method;
                     self.resolve_func(method, declaration)?;
                 }
+
+                self.end_scope()?;
             }
         }
         trace!(?statement, "Finished resolving statement");

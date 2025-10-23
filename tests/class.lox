@@ -1,12 +1,20 @@
-class Ob {
+class TestObject {
   doTheThing(name) {
     print "Do the thing, " + name;
+  }
+  captureThis(val) {
+    this.newProp = val;
+    return this.doTheThing("wheeee");
   }
 }
 
 
-var obj = Ob();
+var obj = TestObject();
 obj.foo = "bar";
 print obj.foo;
 
 obj.doTheThing("Zhu-Li");
+
+var captured = obj.captureThis("baz");
+assert_eq(obj.newProp, "baz");
+captured();

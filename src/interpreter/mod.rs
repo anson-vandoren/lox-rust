@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use environment::{Environment, RcCell};
 use snafu::whatever;
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 use super::{LoxError, Result};
 use crate::{
@@ -50,7 +50,7 @@ impl Interpreter {
         }
     }
 
-    #[instrument(skip(self, statements), err, ret, level = "trace")]
+    #[instrument(skip(self, statements))]
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
         for statement in statements {
             self.execute(&statement)?;
@@ -58,6 +58,7 @@ impl Interpreter {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     fn execute(&mut self, stmt: &Stmt) -> Result<()> {
         trace!(?stmt, "Excuting statement");
         match stmt {
@@ -73,6 +74,7 @@ impl Interpreter {
         }
     }
 
+    #[instrument(skip(self))]
     fn evaluate(&mut self, expr: &Expr) -> Result<Object> {
         trace!(?expr, "Evaluating expression");
         match expr {
@@ -86,9 +88,11 @@ impl Interpreter {
             Expr::Call(expr) => self.eval_call(expr),
             Expr::Get(expr) => self.eval_get(expr),
             Expr::Set(expr) => self.eval_set(expr),
+            Expr::This(expr) => self.eval_this(expr),
         }
     }
 
+    #[instrument(skip(self))]
     fn evaluate_literal(&mut self, expr: &Expr) -> Result<Literal> {
         trace!(?expr, "Evaluating literal expression");
         let as_obj = self.evaluate(expr)?;
@@ -101,34 +105,24 @@ impl Interpreter {
         }
     }
 
+    #[instrument(skip(self), err)]
     pub fn execute_block(&mut self, statements: &Vec<Stmt>, environment: Environment) -> Result<()> {
+        trace!(?environment, ?statements, ">>execute_block()");
         // TODO: consider passing environment to the visit methods instead
-        self.enter_scope(environment);
-        for statement in statements {
-            self.execute(statement).inspect_err(|_| self.exit_scope().unwrap())?
-        }
-        self.exit_scope().unwrap();
-        Ok(())
-    }
+        //
+        let environment = Rc::new(RefCell::new(environment));
+        let original_env = std::mem::replace(&mut self.environment, environment);
 
-    fn enter_scope(&mut self, nested_env: Environment) {
-        trace!(values=?nested_env.values, "entering scope");
-        let new_env = Rc::new(RefCell::new(nested_env));
-        new_env.borrow_mut().enclosing = Some(self.environment.clone());
-        self.environment = new_env;
-        trace!(top=?self.environment.borrow().values, enclosing=?self.environment.borrow().enclosing.as_ref().unwrap().borrow().values, "scope is entered");
-    }
-
-    fn exit_scope(&mut self) -> Result<()> {
-        trace!("exiting scope");
-        let new_env = self
-            .environment
-            .borrow_mut()
-            .enclosing
-            .take()
-            .expect("Exited scope with no enclosing");
-        self.environment = new_env;
-        Ok(())
+        let result = (|| {
+            for statement in statements {
+                self.execute(statement).inspect_err(|err| {
+                    warn!(?err, ?statement, "Failed to execute statement in block");
+                })?
+            }
+            Ok(())
+        })();
+        self.environment = original_env;
+        result
     }
 
     // TODO: shouldn't need to be mut
@@ -184,6 +178,7 @@ impl Interpreter {
         } else {
             Object::Literal(Literal::Null)
         };
+        // TODO: why not regular return here?
         Err(LoxError::Return { value })
     }
 
@@ -212,10 +207,10 @@ impl Interpreter {
             TokenType::GreaterEqual => (left >= right).into(),
             TokenType::Less => (left < right).into(),
             TokenType::LessEqual => (left <= right).into(),
-            TokenType::Minus => (left - right).map_err(|e| e.into_lox(&expr.operator))?,
-            TokenType::Plus => (left + right).map_err(|e| e.into_lox(&expr.operator))?,
-            TokenType::Slash => (left / right).map_err(|e| e.into_lox(&expr.operator))?,
-            TokenType::Star => (left * right).map_err(|e| e.into_lox(&expr.operator))?,
+            TokenType::Minus => (left - right).map_err(|e| e.add_line(expr.operator.line))?,
+            TokenType::Plus => (left + right).map_err(|e| e.add_line(expr.operator.line))?,
+            TokenType::Slash => (left / right).map_err(|e| e.add_line(expr.operator.line))?,
+            TokenType::Star => (left * right).map_err(|e| e.add_line(expr.operator.line))?,
             TokenType::EqualEqual => (left == right).into(),
             TokenType::BangEqual => (left != right).into(),
             _ => Object::Literal(Literal::Null),
@@ -247,7 +242,7 @@ impl Interpreter {
         let right = self.evaluate_literal(&expr.right)?;
         let obj = match expr.operator.typ {
             TokenType::Minus => {
-                let n = right.into_number().map_err(|e| e.into_lox(&expr.operator))?;
+                let n = right.into_number().map_err(|e| e.add_line(expr.operator.line))?;
                 Object::from(-n)
             }
             TokenType::Bang => (!right.is_truthy()).into(),
@@ -256,7 +251,7 @@ impl Interpreter {
                 Err(LoxError::Runtime {
                     expected: "'!' or '-' unary operator".to_string(),
                     found: token.to_string(),
-                    token,
+                    line: Some(token.line),
                 })
             }?,
         };
@@ -291,12 +286,12 @@ impl Interpreter {
         let function = callee;
         if arguments.len() as u8 != function.arity() {
             return Err(LoxError::Runtime {
-                token: expr.paren.clone(),
+                line: Some(expr.paren.line),
                 expected: format!("{} arguments", function.arity()),
                 found: format!("{} arguments", arguments.len()),
             });
         }
-        function.call(self, arguments).map_err(|e| e.into_lox(&expr.paren))
+        function.call(self, arguments).map_err(|e| e.add_line(expr.paren.line))
     }
 
     fn resolve(&mut self, token: &Token, i: u8) {
@@ -336,22 +331,37 @@ impl Interpreter {
         if let Object::Instance(mut object) = object {
             let value = self.evaluate(&expr.value)?;
             object.set(expr.name.clone(), value.clone());
-            trace!(object = ?object, ?expr, ?value, env = ?self.environment.borrow().values, "Object after setting");
+            trace!(?expr,?object,  ?value, env = ?self.environment.borrow().values, "Object after setting");
 
             // Update env with the mutated object
-            let Expr::Variable(ref var_expr) = *expr.object else {
-                whatever!("wrong kind of expr")
+            //let Expr::Variable(ref var_expr) = *expr.object else {
+            //    whatever!("wrong kind of expr: {:?}", *expr.object)
+            //};
+            let t = match *expr.object {
+                Expr::Variable(ref var_expr) => var_expr.name.clone(),
+                Expr::This(ref t) => t.keyword.clone(),
+                _ => whatever!("Wrong kind of expr"),
             };
-            trace!(name = ?var_expr.name, "Updating mutated obj");
-            self.environment.borrow_mut().assign(&var_expr.name, Object::Instance(object))?;
+            trace!(name = ?t, "Updating mutated obj");
+            self.environment.borrow_mut().assign(&t, Object::Instance(object))?;
 
             Ok(value)
         } else {
             Err(LoxError::Runtime {
                 found: format!("{:?}", object),
                 expected: "A LoxInstance".into(),
-                token: expr.name.clone(),
+                line: Some(expr.name.line),
             })
         }
+    }
+
+    fn eval_this(&mut self, expr: &expr::This) -> Result<Object> {
+        trace!(?expr, ">>eval_this()");
+        let var = expr::Variable {
+            name: expr.keyword.clone(),
+        };
+        let var = self.lookup_variable(&var);
+        trace!(?var, "<<eval_this()");
+        var
     }
 }
